@@ -10,6 +10,14 @@ export interface Stored {
   platform?: "console" | "pc";
   paused?: boolean;
   last_capture?: string;
+  /** Price check: searches run today (UTC day), and the runner's last status. */
+  pc_day?: string;
+  pc_count?: number;
+  pc_running?: boolean;
+  pc_stopped?: string | null;
+  pc_learned?: boolean;
+  pc_note?: string | null;
+  pc_at?: string;
 }
 
 export const MAX_ROWS = 20_000;
