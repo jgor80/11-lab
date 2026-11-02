@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "XI Lab capture",
-  "version": "0.2.0",
-  "description": "Copies what the EA FC Web App already shows you, for XI Lab: transfer-market prices from your own searches, and your club when you open it. Never searches, clicks, bids, lists or moves anything.",
+  "version": "0.3.0",
+  "description": "Copies what the EA FC Web App already shows you, for XI Lab: transfer-market prices from your own searches, and your club when you open it. Optional slow price check for your own cards. Never bids, buys, lists or moves anything.",
   "permissions": [
     "storage"
   ],

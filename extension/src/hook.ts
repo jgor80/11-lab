@@ -1,7 +1,12 @@
 // Runs in the Web App's own page (MAIN world). It wraps fetch and XMLHttpRequest ONLY to read a copy of
 // responses the Web App already received: transfer-market searches (prices), your club and squad lists, and
-// the Web App's own name files. It never sends, changes or repeats a request.
+// the Web App's own name files. It never changes the Web App's requests.
+// PRICE CHECK (Jeff's choice, 2026-11-02): when the user presses Start in the helper, it also runs slow GET searches
+// for their own club cards, in this tab, using the search format and session headers of a search the user ran
+// themselves. Only GET to the transfer-market search address (isSafeSearch); never bids, buys or lists. Headers
+// stay in this page's memory and are never stored or sent anywhere else.
 import { isTransferMarketSearch, summarizeSearch } from "../../src/market/capture.js";
+import { delayBefore, isSafeSearch, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
 
 const TAG = "xilab-capture";
@@ -31,8 +36,34 @@ function emit(url: string, json: unknown) {
   }
 }
 
+// The last search the user ran themselves: its address (as a template) and its headers (the session).
+let template: string | null = null;
+let searchHeaders: Record<string, string> = {};
+function learn(url: string, method: string, headers: Record<string, string>) {
+  if (running) return; // only the user's own searches teach the format
+  const t = learnTemplate(new URL(url, window.location.href).href, method);
+  if (!t) return;
+  template = t;
+  searchHeaders = headers;
+  window.postMessage({ [TAG]: true, pc: { learned: true } }, window.location.origin);
+}
+function headersOf(h: HeadersInit | undefined): Record<string, string> {
+  if (!h) return {};
+  if (h instanceof Headers) return Object.fromEntries([...h.entries()]);
+  if (Array.isArray(h)) return Object.fromEntries(h);
+  return { ...(h as Record<string, string>) };
+}
+
 const origFetch = window.fetch;
 window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>) {
+  try {
+    const req = args[0];
+    const url = typeof req === "string" ? req : req instanceof URL ? req.href : (req as Request).url;
+    const method = args[1]?.method ?? (req instanceof Request ? req.method : "GET");
+    if (isTransferMarketSearch(url)) learn(url, method, headersOf(args[1]?.headers ?? (req instanceof Request ? req.headers : undefined)));
+  } catch {
+    /* never get in the Web App's way */
+  }
   const res = await origFetch.apply(this, args);
   try {
     const url = typeof args[0] === "string" ? args[0] : args[0] instanceof URL ? args[0].href : (args[0] as Request).url;
@@ -43,9 +74,27 @@ window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>)
   return res;
 } as typeof fetch;
 
+type Xhr = XMLHttpRequest & { __xilabUrl?: string; __xilabMethod?: string; __xilabHeaders?: Record<string, string> };
+const setHeader = XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader = function (this: Xhr, name: string, value: string) {
+  if (this.__xilabHeaders) this.__xilabHeaders[name] = value;
+  return setHeader.call(this, name, value);
+};
+const send = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send = function (this: Xhr, ...a: unknown[]) {
+  try {
+    if (this.__xilabUrl && isTransferMarketSearch(this.__xilabUrl)) learn(this.__xilabUrl, this.__xilabMethod ?? "GET", this.__xilabHeaders ?? {});
+  } catch {
+    /* never get in the Web App's way */
+  }
+  return (send as (...x: unknown[]) => void).apply(this, a);
+};
+
 const open = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function (this: XMLHttpRequest & { __xilabUrl?: string }, method: string, url: string | URL, ...rest: unknown[]) {
+XMLHttpRequest.prototype.open = function (this: Xhr, method: string, url: string | URL, ...rest: unknown[]) {
   this.__xilabUrl = String(url);
+  this.__xilabMethod = method;
+  this.__xilabHeaders = {};
   if (wanted(this.__xilabUrl))
     this.addEventListener("load", () => {
       try {
@@ -58,3 +107,59 @@ XMLHttpRequest.prototype.open = function (this: XMLHttpRequest & { __xilabUrl?: 
     });
   return (open as (...a: unknown[]) => void).call(this, method, url, ...rest);
 } as typeof XMLHttpRequest.prototype.open;
+
+// ---------------------------------------------------------------- price check runner
+// Commands come from the helper (relay.ts) as { "xilab-cmd": "pc-start", urls } or "pc-stop". Each URL was built
+// by the relay from the learned template; it is re-checked here before every request.
+let running = false;
+let stopAsked = false;
+const status = (pc: Record<string, unknown>) => window.postMessage({ [TAG]: true, pc }, window.location.origin);
+const sleep = (ms: number) => new Promise<void>((r) => {
+  const t0 = Date.now();
+  const tick = () => (stopAsked || Date.now() - t0 >= ms ? r() : setTimeout(tick, 500));
+  tick();
+});
+
+async function run(items: { ea_item_id: number; asset_id: number | null }[]) {
+  if (running) return;
+  if (!template) return status({ running: false, stopped: "Run one search yourself in the Web App first, so the helper learns EA's search format." });
+  running = true;
+  stopAsked = false;
+  status({ running: true, stopped: null });
+  let n = 0;
+  try {
+    for (const it of items) {
+      const wait = delayBefore(n);
+      if (wait > 30_000) status({ running: true, note: `Short break (${Math.round(wait / 60_000)} min)` });
+      await sleep(wait);
+      if (stopAsked) break;
+      const url = searchUrlFor(template, it);
+      if (!url) continue;
+      if (!isSafeSearch(url, "GET")) return status({ running: false, stopped: "Refused an unsafe request." });
+      const res = await window.fetch(url, { method: "GET", headers: searchHeaders, credentials: "include" });
+      let json: unknown = null;
+      try {
+        json = await res.clone().json();
+      } catch {
+        /* not JSON */
+      }
+      n++;
+      status({ running: true, searched: 1, note: null });
+      const why = stopReason(res.status, json);
+      if (why) return status({ running: false, stopped: why });
+    }
+    status({ running: false, stopped: stopAsked ? "Stopped." : "Done for now." });
+  } catch {
+    status({ running: false, stopped: "Network problem. Stopped." });
+  } finally {
+    running = false;
+  }
+}
+
+window.addEventListener("message", (e: MessageEvent) => {
+  if (e.source !== window || !e.data) return;
+  const cmd = e.data["xilab-cmd"];
+  if (cmd === "pc-start" && Array.isArray(e.data.items)) void run(e.data.items);
+  if (cmd === "pc-stop") stopAsked = true;
+  if (cmd === "pc-ping") status({ learned: !!template, running });
+});

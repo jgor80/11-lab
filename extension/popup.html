@@ -12,16 +12,22 @@
   <h1>XI LAB · CAPTURE</h1>
   <div class="row"><span class="big" id="count">0</span><span class="muted">price observations stored</span></div>
   <div class="muted" id="last">No captures yet.</div>
-  <div class="row"><label>Market <select id="platform"><option value="console">Console</option><option value="pc">PC</option></select></label>
+  <div class="row"><label>Market <select id="platform"><option value="console">Console (Xbox + PlayStation)</option><option value="pc">PC</option></select></label>
     <label><input type="checkbox" id="paused" /> Pause</label></div>
   <div class="row"><button id="download">Download CSV</button><button id="copy">Copy CSV</button><button id="clear">Clear</button></div>
-  <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never searches, clicks, bids or lists, and nothing leaves your browser until you export it.</p>
+  <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never clicks, bids or lists, and nothing leaves your browser until you export it. It searches only when you start Price check below.</p>
   <p class="muted">Import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
   <h1 style="margin-top:14px">MY CLUB</h1>
   <div class="row"><span class="big" id="club-count">0</span><span class="muted">club items stored</span></div>
   <div class="muted" id="club-last">Open your Club in the Web App to capture it.</div>
   <div class="row"><button id="club-download">Download club file</button><button id="club-clear">Clear club</button></div>
   <p class="muted">Open Club &gt; Players (and Managers) and page through it: each page the Web App loads is copied. Import the file on gafferbot.app/fut (My cards &gt; Import club). Club reading is new and not yet checked against FC 27.</p>
+  <h1 style="margin-top:14px">PRICE CHECK</h1>
+  <div class="row"><span class="big" id="pc-count">0</span><span class="muted">of 100 searches used today</span></div>
+  <div class="muted" id="pc-status">Run one search yourself first, then press Start.</div>
+  <div class="row"><button id="pc-start">Start</button><button id="pc-stop">Stop</button></div>
+  <p class="muted">With the Web App open and signed in, the helper searches your club players that have no price from the last 12 hours, one every 10&ndash;20 seconds, with a few minutes' break every 12 searches, up to 100 a day. It only searches: it never bids, buys or lists. It stops by itself at any captcha, "too many actions" or error. Keep the Web App tab open while it runs.</p>
+  <p class="warn">Automatic searching carries more account risk than capturing your own searches. EA can restrict market access for it.</p>
   <p class="warn">Any third-party software on EA's site carries some account risk.</p>
   <script src="dist/popup.js"></script>
 </body></html>
