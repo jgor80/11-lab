@@ -1,14 +1,8 @@
-// Reads a chemistry rule version as plain data for the (upcoming) deterministic chemistry engine.
+// Reads a chemistry rule version from the DB as plain data for the chemistry engine (src/chemistry).
 import type { Db } from "./sqlite.js";
+import type { ChemistryRules } from "../chemistry/rules.js";
 
-export interface ChemistryRules {
-  id: string;
-  season: string;
-  status: "unverified" | "verified" | "retired";
-  /** thresholds.club = [2, 4, 7] means 2 players -> 1 point, 4 -> 2, 7 -> 3 */
-  thresholds: Record<"club" | "league" | "nation", number[]>;
-  modifiers: Record<string, number>;
-}
+export type { ChemistryRules };
 
 export function loadChemistryRules(db: Db, versionId?: string, season = "FC27"): ChemistryRules {
   const v = (versionId

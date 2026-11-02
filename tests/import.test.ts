@@ -107,9 +107,15 @@ describe("schema", () => {
 describe("chemistry rules", () => {
   it("seeds the community thresholds as an active, unverified version", () => {
     const r = loadChemistryRules(db);
-    expect(r).toMatchObject({ id: "fc27-community-v0", status: "unverified" });
+    expect(r).toMatchObject({ id: "fc27-community-v1", status: "unverified" });
     expect(r.thresholds).toEqual({ club: [2, 4, 7], league: [3, 5, 8], nation: [2, 5, 8] });
-    expect(r.modifiers["manager.bonus"]).toBe(1);
+    expect(r.modifiers["manager.nation_count"]).toBe(1);
+    expect(r.modifiers["manager.league_count"]).toBe(1);
+    expect(r.modifiers["manager.bonus"]).toBeUndefined();
+    // v0 is kept, inactive, for history.
+    const v0 = loadChemistryRules(db, "fc27-community-v0");
+    expect(v0.thresholds).toEqual(r.thresholds);
+    expect(v0.modifiers["manager.bonus"]).toBe(1);
   });
 
   it("allows only one active version per season", () => {

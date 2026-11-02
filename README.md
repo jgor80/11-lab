@@ -1,7 +1,7 @@
 # XI Lab
 
-A chemistry-aware FUT squad optimizer. This first slice is the **data layer**: the schema for FC 27
-Ultimate Team cards and an import pipeline that tracks where every row came from.
+A chemistry-aware FUT squad optimizer. This repo holds the **data layer** (schema for FC 27 Ultimate Team cards and an import pipeline that
+tracks where every row came from) and the **chemistry engine**.
 
 ## What's here
 
@@ -18,6 +18,12 @@ the import run, and timestamps.
 
 The chemistry thresholds are seeded as rule version `fc27-community-v0`, **unverified**. They are rows,
 not code, so they can be corrected without a release.
+
+## Chemistry engine
+
+`src/chemistry/` is the deterministic, versioned chemistry engine: per-player club/league/nation
+breakdown, links needed for the next point, manager and Icon/Hero rules, and swap previews showing who
+gains or loses. Pure TypeScript, no DB. See `docs/chemistry-engine.md`.
 
 ## Use it
 
