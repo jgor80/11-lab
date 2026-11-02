@@ -16,7 +16,7 @@ export function readManualJson(text: string): AdapterOutput {
 const CORE_COLUMNS = new Set([
   "card_key", "person_key", "name", "version", "rarity", "overall", "positions", "club", "league", "nation",
   "is_icon", "is_hero", "skill_moves", "weak_foot", "attacking_work_rate", "defensive_work_rate",
-  "preferred_foot", "height_cm", "playstyles", "roles", "evidence",
+  "preferred_foot", "height_cm", "playstyles", "roles", "evidence", "ea_item_id",
 ]);
 
 const bool = (v: string | undefined) => /^(1|true|yes|y)$/i.test(v ?? "");
@@ -35,6 +35,8 @@ export function readManualCsv(text: string): AdapterOutput {
       }
       out.records.push({
         card_key: row.card_key ?? "",
+        // Optional: EA's item id, so prices captured from the Web App match this card (promos, Icons, Heroes).
+        ea_item_id: intOrUndef(row.ea_item_id),
         person: {
           key: row.person_key || row.name || "",
           common_name: row.name ?? "",

@@ -11,7 +11,7 @@ import {
 } from "../src/market/index.js";
 import { demoMarketCards, demoMemberships, demoPriceHistory } from "../src/market/demo.js";
 import type { Squad } from "../src/workspace/index.js";
-import { BrowserCardSource, LocalMembershipStore, LocalPriceStore, LocalWatchlistStore, marketPrefs, savedSquads, userMarketCards } from "./market-storage.js";
+import { BrowserCardSource, LocalCaptureHoldStore, LocalMembershipStore, LocalPriceStore, LocalWatchlistStore, marketPrefs, savedSquads, userMarketCards } from "./market-storage.js";
 
 const OWNER = "local";
 const app = document.getElementById("app")!;
@@ -22,17 +22,20 @@ function build() {
   const anchor = new Date().toISOString();
   const demo = P.demo;
   const prices = new LocalPriceStore(OWNER, demo ? demoPriceHistory(anchor) : []);
+  const holds = new LocalCaptureHoldStore(OWNER);
   return {
     prices,
+    holds,
     svc: createMarketService({
       prices,
       memberships: new LocalMembershipStore(!demo, demo ? demoMemberships(anchor) : []),
       watchlists: new LocalWatchlistStore(OWNER),
       cards: new BrowserCardSource([...(demo ? demoMarketCards() : []), ...userMarketCards()]),
+      holds,
     }),
   };
 }
-let { svc, prices } = build();
+let { svc, prices, holds } = build();
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const coins = (n: number | null | undefined) => (n === null || n === undefined ? "–" : n.toLocaleString("en-US"));
@@ -303,19 +306,34 @@ async function watchlist() {
 }
 
 let importOut = "";
-function importView() {
+function linkSelect(ea: number, rating: number | null) {
+  const options = userMarketCards().filter((c) => rating === null || c.rating === rating);
+  if (!options.length) return `<span class="small muted">No card rated ${rating ?? "?"} yet</span>`;
+  return `<select data-input="linkheld" data-ea="${ea}" style="width:auto"><option value="">Choose…</option>${options.map((c) => `<option value="${esc(c.id)}">${esc(c.name)} (${c.rating})</option>`).join("")}</select>`;
+}
+
+async function importView() {
+  const held = await svc.getHeldCaptures(OWNER);
+  const heldPanel = held.items.length
+    ? `<section class="panel"><h3>Captured items not in your cards yet</h3>
+    <p class="small">${esc(held.note)} ${held.total_observations} price${held.total_observations === 1 ? "" : "s"} across ${held.items.length} item${held.items.length === 1 ? "" : "s"}.</p>
+    <div class="tablewrap"><table class="cmp"><thead><tr><th>EA item</th><th>Rating</th><th>Version</th><th>Position</th><th>Latest</th><th>Seen</th><th>Link to a card</th></tr></thead><tbody>
+    ${held.items.slice(0, 50).map((i) => `<tr><td><code>${i.ea_item_id}</code></td><td>${i.rating ?? "–"}</td><td>${i.special_version === null ? "unknown" : i.special_version ? "special" : "base"}</td><td>${esc(i.details?.position ?? "–")}</td><td>${coins(i.latest_price)} <span class="small muted">${esc(i.latest_platform)}</span></td><td class="small">${i.observations}× · ${esc(when(i.latest_observed_at))}</td><td>${linkSelect(i.ea_item_id, i.rating)}</td></tr>`).join("")}
+    </tbody></table></div><p class="small muted">Labelled game data: lowest Buy Now on results pages you viewed. Add the card in the Squad Builder, then link it here. Only cards with the same rating are offered.</p></section>`
+    : "";
   return `<section class="panel"><h3>Import price history</h3>
-    <p class="small">Paste CSV or JSON. Header: <code>${PRICE_CSV_HEADER}</code>. <code>card_id</code> must be a card XI Lab already knows (from the squad builder or the card database); <code>platform</code> is console or pc; <code>observed_at</code> is an ISO time. Rows are stored privately in this browser, tagged "Your imported price history".</p>
+    <p class="small"><b>From the XI Lab Price Capture extension:</b> download its CSV and import it here. Rows are matched to your cards by EA item id and tagged "Your Web App captures". Items you don't have as cards yet are kept and linked later.</p>
+    <p class="small">Or paste CSV or JSON. Header: <code>${PRICE_CSV_HEADER}</code>. <code>card_id</code> must be a card XI Lab already knows (from the squad builder or the card database); <code>platform</code> is console or pc; <code>observed_at</code> is an ISO time. Rows are stored privately in this browser, tagged "Your imported price history".</p>
     <form data-form="import"><textarea name="text" rows="8" placeholder="${PRICE_CSV_HEADER}"></textarea>
       <div class="row" style="margin-top:8px"><input type="file" name="file" accept=".csv,.json,text/csv,application/json" style="width:auto"/><button class="primary" type="submit">Import</button><button type="button" data-act="clearimports">Delete my imported prices</button></div></form>
-    <div>${importOut}</div></section>`;
+    <div>${importOut}</div></section>${heldPanel}`;
 }
 
 function sourcesView() {
   return `<section class="panel"><h3>Data sources</h3><div class="tablewrap"><table class="cmp"><thead><tr><th>Source</th><th>Status</th><th>Storage</th><th>Analytics</th><th>Training</th><th>Redistribution</th></tr></thead><tbody>
   ${svc.getDataSourceStatus().map((s) => `<tr><td><b>${esc(s.name)}</b>${s.is_demo ? ` <span class="badge b-demo">demo</span>` : ""}<div class="small muted">${esc(s.status_note)}</div></td><td><span class="badge ${s.status === "enabled" ? "s-good" : "s-muted"}">${esc(words(s.status))}</span></td>${(["storage", "derived_analytics", "model_training", "redistribution"] as const).map((k) => `<td>${s.permissions[k] ? "yes" : "no"}</td>`).join("")}</tr>`).join("")}
   </tbody></table></div>
-  <p class="small muted">No live price feed is connected: none is authorised. Market Lab never scrapes or automates the EA web app and never buys, sells or bids.</p></section>`;
+  <p class="small muted">No live price feed is connected: none is authorised. Real prices come only from your own imports and from the XI Lab Price Capture extension, which reads transfer-market results the EA Web App already loaded when you searched. Nothing searches, clicks, bids, buys or sells for you.</p></section>`;
 }
 
 // ---------------------------------------------------------------- shell
@@ -328,7 +346,7 @@ async function render() {
     if (r.startsWith("card/")) body = await cardPage(decodeURIComponent(r.slice(5)));
     else if (r === "scanner") body = await scanner();
     else if (r === "watchlist") body = await watchlist();
-    else if (r === "import") body = importView();
+    else if (r === "import") body = await importView();
     else if (r === "sources") body = sourcesView();
     else body = await overview();
   } catch (e) {
@@ -350,7 +368,8 @@ app.addEventListener("click", async (e) => {
   if (el.dataset.act === "unwatch") await svc.removeFromWatchlist(OWNER, id, (el.dataset.platform as Platform) ?? P.platform);
   if (el.dataset.act === "clearimports") {
     prices.clearImported();
-    ({ svc, prices } = build());
+    holds.clear();
+    ({ svc, prices, holds } = build());
     importOut = `<p>Imported prices deleted.</p>`;
   }
   render();
@@ -358,10 +377,18 @@ app.addEventListener("click", async (e) => {
 app.addEventListener("change", (e) => {
   const el = e.target as HTMLInputElement;
   const k = el.dataset.input;
+  if (k === "linkheld") {
+    if (!el.value) return;
+    svc.linkHeldCapture(OWNER, Number(el.dataset.ea), el.value).then(
+      (r) => ((importOut = `<p>${r.linked} captured price${r.linked === 1 ? "" : "s"} linked.</p>`), render()),
+      (err) => ((importOut = `<p class="warn">${esc((err as Error).message)}</p>`), render()),
+    );
+    return;
+  }
   if (k === "platform") P.platform = el.value as Platform;
   else if (k === "demo") {
     P.demo = el.checked;
-    ({ svc, prices } = build());
+    ({ svc, prices, holds } = build());
   } else if (k?.startsWith("scan.")) (scan as Record<string, string>)[k.slice(5)] = el.value;
   else return;
   marketPrefs.save(P);
@@ -378,7 +405,7 @@ app.addEventListener("submit", async (e) => {
       const file = fd.get("file") as File | null;
       const text = file && file.size ? await file.text() : String(fd.get("text") ?? "");
       const r = await svc.importPriceHistory(OWNER, text);
-      importOut = `<p><b>${r.accepted}</b> rows accepted (${r.inserted} new, ${r.skipped} already stored), ${r.duplicates} duplicate rows, ${r.rejected.length} rejected.</p>${r.rejected.length ? `<ul class="levers small">${r.rejected.slice(0, 30).map((x) => `<li>Line ${x.line}: ${esc(x.reason)}</li>`).join("")}</ul>` : ""}`;
+      importOut = `<p><b>${r.accepted}</b> rows accepted (${r.inserted} new, ${r.skipped} already stored), ${r.duplicates} duplicate rows, ${r.rejected.length} rejected.${r.held ? ` <b>${r.held}</b> captured prices kept for items not in your cards yet.` : ""}${r.linked_from_held ? ` ${r.linked_from_held} earlier captures linked to cards you've added.` : ""}</p>${r.rejected.length ? `<ul class="levers small">${r.rejected.slice(0, 30).map((x) => `<li>Line ${x.line}: ${esc(x.reason)}</li>`).join("")}</ul>` : ""}`;
     }
   } catch (err) {
     const msg = `<p class="warn">${esc((err as Error).message)}</p>`;

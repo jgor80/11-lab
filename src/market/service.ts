@@ -4,14 +4,14 @@ import { cardUtility, comparableCards } from "../intelligence/card.js";
 import type { ChemistryRules } from "../chemistry/index.js";
 import { DEFAULT_RULES, squadSchema, type Squad } from "../workspace/index.js";
 import { DEFAULT_BASKETS, computeIndex, rebalance, summarizeIndex, type BasketDefinition, type BasketMembership, type IndexSummary } from "./baskets.js";
-import { parsePriceImport } from "./import.js";
+import { parsePriceImport, type UnmatchedCapture } from "./import.js";
 import { classifyRegime, type RegimeResult } from "./regime.js";
 import { DEFAULT_MARKET_RULES, MARKET_ENGINE_VERSION, type MarketRules } from "./rules.js";
 import { change, freshness, iso, ms, round, toSeries, window, type Point } from "./series.js";
 import { assessSignals, isPeer, meanReversion, momentum, peerChanges, relativeStrength, type Benchmark, type SignalAssessment, type SignalStatus } from "./signals.js";
 import { DEFAULT_PRICE_SOURCES, assertUsable } from "./sources.js";
 import { compareInSquad } from "./squad-link.js";
-import type { MarketCardSource, MembershipStore, PriceStore, WatchItem, WatchlistStore } from "./store.js";
+import type { CaptureHoldStore, MarketCardSource, MembershipStore, PriceStore, WatchItem, WatchlistStore } from "./store.js";
 import { analyzeTrade, type ThesisInput } from "./thesis.js";
 import { WINDOWS, type MarketCard, type MarketProvenance, type Platform, type PriceObservation, type PriceSource, type Window } from "./types.js";
 
@@ -20,6 +20,8 @@ export interface MarketDeps {
   memberships: MembershipStore;
   watchlists: WatchlistStore;
   cards: MarketCardSource;
+  /** Optional: keeps captured prices for EA items not in the card database yet. Without it they're rejected. */
+  holds?: CaptureHoldStore;
   sources?: PriceSource[];
   baskets?: BasketDefinition[];
   rules?: MarketRules;
@@ -135,6 +137,42 @@ export function createMarketService(deps: MarketDeps) {
       const next = rebalance(b, cards, cur, at).map((m) => (opts.backfilled && !cur.length ? { ...m, backfilled: true } : m));
       await deps.memberships.replace(b.id, next);
     }
+  }
+
+  /** EA item id → card id: exact item id, or (base cards) the asset id when the rating matches too. */
+  function eaResolver(cards: MarketCard[]) {
+    const byEa = new Map<number, MarketCard>();
+    for (const c of cards) if (c.ea_item_id) byEa.set(c.ea_item_id, c);
+    return (ea: number, asset: number | null, rating: number | null) => {
+      const hit = byEa.get(ea);
+      if (hit && (rating === null || hit.rating === rating)) return hit.id;
+      const base = asset ? byEa.get(asset) : undefined;
+      return base && rating !== null && base.rating === rating ? base.id : null;
+    };
+  }
+
+  function unmatchedReason(u: UnmatchedCapture) {
+    const special = u.details?.rare_flag !== undefined && u.details.rare_flag > 1;
+    return `EA item ${u.ea_item_id}${u.rating ? ` (rated ${u.rating})` : ""} isn't in your card database${special ? " (a special version: promo, Icon or Hero)" : ""}. Add the card to use this price.`;
+  }
+
+  async function relink(owner: string, cards: MarketCard[]) {
+    const held = await deps.holds!.list(owner);
+    if (!held.length) return { linked: 0, still_held: 0, rows: [] as PriceObservation[] };
+    const resolve = eaResolver(cards);
+    const linked: UnmatchedCapture[] = [];
+    const rows: PriceObservation[] = [];
+    for (const h of held) {
+      const card_id = resolve(h.ea_item_id, h.asset_id, h.rating);
+      if (!card_id) continue;
+      linked.push(h);
+      rows.push({ ...h.observation, card_id, quality: [...(h.observation.quality ?? []), `Captured before this card was in your database; linked by EA item id on ${now().slice(0, 10)}.`] });
+    }
+    if (rows.length) {
+      await deps.prices.insert(owner, rows);
+      await deps.holds!.release(owner, linked);
+    }
+    return { linked: rows.length, still_held: held.length - rows.length, rows };
   }
 
   return {
@@ -350,22 +388,70 @@ export function createMarketService(deps: MarketDeps) {
       const source = sourceById.get(opts.source_id ?? (captured ? "web_app_capture" : "user_import"));
       assertUsable(source, "storage");
       const cards = await deps.cards.list(owner);
-      const byEa = new Map<number, MarketCard>();
-      for (const c of cards) if (c.ea_item_id) byEa.set(c.ea_item_id, c);
-      const resolveEaItem = (ea: number, asset: number | null, rating: number | null) => {
-        const hit = byEa.get(ea);
-        if (hit && (rating === null || hit.rating === rating)) return hit.id;
-        // Base cards: EA's asset id is the base item id. Only accept it when the rating matches too.
-        const base = asset ? byEa.get(asset) : undefined;
-        return base && rating !== null && base.rating === rating ? base.id : null;
-      };
+      const resolveEaItem = eaResolver(cards);
       const res = parsePriceImport(text, { source, received_at: opts.received_at ?? now(), knownCardIds: new Set(cards.map((c) => c.id)), rules, resolveEaItem });
+      const rejected = [...res.rejected];
+      let held = 0;
+      if (res.unmatched.length && deps.holds) held = (await deps.holds.hold(owner, res.unmatched)).held;
+      else for (const u of res.unmatched) rejected.push({ line: 0, reason: unmatchedReason(u), raw: { ea_item_id: u.ea_item_id, rating: u.rating } });
       const stored = await deps.prices.insert(source.is_demo ? null : owner, res.rows);
-      if (res.rows.length) {
-        const earliest = res.rows.reduce((m, r) => (r.observed_at < m ? r.observed_at : m), res.rows[0]!.observed_at);
+      // Anything held earlier whose card has been added since gets linked now too.
+      const relinked = deps.holds ? await relink(owner, cards) : { linked: 0, still_held: 0, rows: [] as PriceObservation[] };
+      if (res.rows.length || relinked.linked) {
+        const all = [...res.rows, ...relinked.rows];
+        const earliest = all.reduce((m, r) => (r.observed_at < m ? r.observed_at : m), all[0]!.observed_at);
         await initBaskets(earliest, { backfilled: true });
       }
-      return { ...res, rows: undefined, accepted: res.rows.length, ...stored };
+      return { ...res, rows: undefined, unmatched: undefined, rejected, accepted: res.rows.length, held, linked_from_held: relinked.linked, still_held: relinked.still_held, ...stored };
+    },
+
+    /** Link held captures to cards added since (run after adding cards). */
+    async relinkHeldCaptures(owner: string) {
+      if (!deps.holds) return { linked: 0, still_held: 0 };
+      const { linked, still_held } = await relink(owner, await deps.cards.list(owner));
+      return { linked, still_held };
+    },
+
+    /** Link every held capture of one EA item to a card you chose (for cards that don't carry EA's item id). */
+    async linkHeldCapture(owner: string, ea_item_id: number, card_id: string) {
+      if (!deps.holds) return { linked: 0 };
+      const card = (await deps.cards.list(owner)).find((c) => c.id === card_id);
+      if (!card) throw new MarketNotFoundError(`Card ${card_id} isn't one of yours`);
+      const held = (await deps.holds.list(owner)).filter((h) => h.ea_item_id === ea_item_id);
+      if (held.some((h) => h.rating !== null && h.rating !== card.rating)) throw new Error(`EA item ${ea_item_id} is rated ${held.find((h) => h.rating !== null)!.rating}; ${card.name} is ${card.rating}. Pick the matching card.`);
+      const rows = held.map((h) => ({ ...h.observation, card_id, quality: [...(h.observation.quality ?? []), `Linked by you to ${card.name} on ${now().slice(0, 10)}.`] }));
+      if (rows.length) {
+        await deps.prices.insert(owner, rows);
+        await deps.holds.release(owner, held);
+        const earliest = rows.reduce((m, r) => (r.observed_at < m ? r.observed_at : m), rows[0]!.observed_at);
+        await initBaskets(earliest, { backfilled: true });
+      }
+      return { linked: rows.length };
+    },
+
+    /** Captured EA items that aren't in your card database yet, one entry per item, so you can add the cards. */
+    async getHeldCaptures(owner: string) {
+      const held = deps.holds ? await deps.holds.list(owner) : [];
+      const by = new Map<number, UnmatchedCapture[]>();
+      for (const h of held) by.set(h.ea_item_id, [...(by.get(h.ea_item_id) ?? []), h]);
+      const items = [...by.values()].map((hs) => {
+        const latest = hs.reduce((a, b) => (b.observation.observed_at > a.observation.observed_at ? b : a));
+        return {
+          ea_item_id: latest.ea_item_id,
+          asset_id: latest.asset_id,
+          rating: latest.rating,
+          details: latest.details ?? null,
+          special_version: latest.details?.rare_flag !== undefined ? latest.details.rare_flag > 1 : null,
+          observations: hs.length,
+          platforms: [...new Set(hs.map((h) => h.observation.platform))],
+          latest_price: latest.observation.price,
+          latest_platform: latest.observation.platform,
+          latest_observed_at: latest.observation.observed_at,
+          reason: unmatchedReason(latest),
+        };
+      });
+      items.sort((a, b) => b.latest_observed_at.localeCompare(a.latest_observed_at));
+      return { items, total_observations: held.length, evidence: "game_data" as const, note: "Prices you captured for items XI Lab can't match to a card yet. They're kept privately and linked automatically once the card is added." };
     },
 
     /** Re-apply basket rules at `at` (a scheduled job in production). Closes and opens memberships; never rewrites history. */
