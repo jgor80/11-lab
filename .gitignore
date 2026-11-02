@@ -5,3 +5,4 @@ node_modules/
 # Third-party downloads stay local until their terms are approved
 data/raw/
 out/
+extension/dist/

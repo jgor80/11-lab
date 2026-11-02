@@ -12,6 +12,8 @@ export interface ImportOptions {
   /** Canonical card ids that exist. Rows for other ids are rejected, never auto-created. */
   knownCardIds: Set<string>;
   rules?: MarketRules;
+  /** For captured Web App rows that carry EA's item id instead of a card_id. */
+  resolveEaItem?: (ea_item_id: number, asset_id: number | null, rating: number | null) => string | null;
 }
 
 export interface ImportResult {
@@ -21,6 +23,7 @@ export interface ImportResult {
 }
 
 export const PRICE_CSV_HEADER = "card_id,platform,price,observed_at,kind,event_at";
+/** Web App captures use ea_item_id (plus asset_id, rating, listings) instead of card_id. */
 
 const PLATFORM_ALIASES: Record<string, Platform> = { console: "console", ps: "console", playstation: "console", xbox: "console", ps5: "console", xsx: "console", pc: "pc" };
 
@@ -46,8 +49,14 @@ export function validatePriceRows(raw: Record<string, unknown>[], opts: ImportOp
   raw.forEach((r, i) => {
     const line = i + 2; // header is line 1
     const reject = (reason: string) => rejected.push({ line, reason, raw: r });
-    const card_id = String(r.card_id ?? "").trim();
-    if (!card_id) return reject("card_id is empty");
+    let card_id = String(r.card_id ?? "").trim();
+    const eaId = Number(r.ea_item_id);
+    if (!card_id && Number.isInteger(eaId) && eaId > 0) {
+      const num = (v: unknown) => (v === undefined || v === "" || v === null || !Number.isInteger(Number(v)) ? null : Number(v));
+      card_id = opts.resolveEaItem?.(eaId, num(r.asset_id), num(r.rating)) ?? "";
+      if (!card_id) return reject(`EA item ${eaId}${r.rating ? ` (rated ${r.rating})` : ""} isn't in your card database (promos, Icons and Heroes need adding first)`);
+    }
+    if (!card_id) return reject("card_id (or ea_item_id) is empty");
     if (!opts.knownCardIds.has(card_id)) return reject(`Unknown card_id "${card_id}" (import the card first; prices never create cards)`);
     const platform = PLATFORM_ALIASES[String(r.platform ?? "").trim().toLowerCase()];
     if (!platform || !PLATFORMS.includes(platform)) return reject(`platform must be console or pc, got "${r.platform}"`);
@@ -70,6 +79,9 @@ export function validatePriceRows(raw: Record<string, unknown>[], opts: ImportOp
     seen.add(key);
     const quality: string[] = [];
     if (kind === "sale") quality.push("Provider says this is a completed sale; XI Lab can't verify it.");
+    const listings = Number(r.listings);
+    if (opts.source.kind === "browser_capture")
+      quality.push(`Lowest Buy Now among ${Number.isInteger(listings) && listings > 0 ? listings : "the"} listing(s) on a results page you viewed; not the whole market.`);
     rows.push({
       card_id,
       platform,

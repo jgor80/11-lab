@@ -13,6 +13,7 @@
     "import": "tsx scripts/import.ts",
     "export:d1": "tsx scripts/export-d1.ts",
     "market": "tsx scripts/market.ts",
+    "build:extension": "node scripts/build-extension.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "vite --config web/vite.config.ts",

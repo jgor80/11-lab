@@ -35,6 +35,17 @@ export const DEFAULT_PRICE_SOURCES: PriceSource[] = [
     evidence: "estimate",
   },
   {
+    id: "web_app_capture",
+    name: "Your Web App captures (XI Lab browser helper)",
+    kind: "browser_capture",
+    status: "enabled",
+    is_demo: false,
+    status_note:
+      "Lowest Buy Now prices from transfer-market searches YOU ran in the EA Web App, read from results the Web App already loaded. The helper never searches, clicks or bids. Only the listings you viewed, not the whole market. Private to you. Third-party software on EA's site carries some account risk (Jeff accepted it on 2026-11-02).",
+    permissions: { ...NONE, storage: true, display: true, derived_analytics: true },
+    evidence: "game_data",
+  },
+  {
     id: "ea_fc_community_api",
     name: "EA FC Community API",
     kind: "official_api",

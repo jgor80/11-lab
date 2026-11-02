@@ -119,7 +119,7 @@ export class SqliteMarketCardSource implements MarketCardSource {
     if (this.cache) return this.cache;
     const rows = this.db
       .prepare(
-        `SELECT c.id, p.common_name AS name, c.version, c.overall, c.is_icon, c.is_hero, c.availability,
+        `SELECT c.id, c.ea_item_id, p.common_name AS name, c.version, c.overall, c.is_icon, c.is_hero, c.availability,
                 cl.name AS club, l.name AS league, n.name AS nation,
                 a.pac, a.sho, a.pas, a.dri, a.def, a.phy,
                 (SELECT group_concat(position_code, '|') FROM (SELECT position_code FROM card_positions cp WHERE cp.card_id = c.id ORDER BY is_primary DESC, position_code)) AS positions
@@ -144,6 +144,7 @@ export class SqliteMarketCardSource implements MarketCardSource {
         version: String(r.version),
         category: categoryOf(String(r.version), !!r.is_icon, !!r.is_hero),
         tradeable: !/untradeable/i.test(String(r.availability ?? "")),
+        ...(typeof r.ea_item_id === "number" ? { ea_item_id: r.ea_item_id } : {}),
         stats,
         source: "database" as const,
       };

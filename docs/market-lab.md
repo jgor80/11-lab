@@ -58,6 +58,15 @@ The old empty `market_prices` table is left as it was.
   `received_at` when storing. Disabling it is one status change.
 - **Working import.** CSV or JSON (`card_id,platform,price,observed_at,kind,event_at`), validated, private to
   the importing user. Web: Market Lab > Import prices. CLI: `npm run market -- import --file prices.csv`.
+- **Passive Web App capture (Jeff's choice, 2026-11-02).** The XI Lab Price Capture browser extension
+  (`extension/`) reads only the transfer-market search results the EA Web App has already downloaded because
+  you searched. It sends no requests, never clicks, bids or lists, and does nothing on any other page. Each
+  results page becomes one row per item: lowest active Buy Now and the listing count. The popup exports a CSV
+  (`ea_item_id,asset_id,rating,platform,price,observed_at,kind,listings`); importing it stores the rows under the
+  `web_app_capture` source (evidence `game_data`, private to you), matched on `player_cards.ea_item_id`, or on
+  the asset id when the rating also matches. Only the listings you looked at are recorded, so coverage follows
+  your searches. Third-party software on EA's site carries some account risk; Jeff accepted it. See
+  "Price capture extension" below.
 - **Demo dataset.** `src/market/demo.ts` generates made-up hourly prices for the made-up demo cards (and some
   made-up fodder, promo, Icon and Hero cards). It is deterministic, tagged source `xilab_demo` and evidence
   `hypothesis`, regenerated on load rather than stored, and every screen built on it shows a DEMO banner. Its
@@ -181,6 +190,24 @@ into `supabase/functions/_shared/fut/xilab/`). Gaffer Bot adds the `fut` market 
 adapters for these interfaces, `/v1/market/*` routes on `fut-api`, and read-only MCP tools with "fut" in the
 name (`get_fut_market_overview`, `get_fut_card_market_intelligence`, `find_fut_market_opportunities`,
 `compare_fut_card_relative_value`, `analyze_fut_trade_thesis`). All of it stays off until `FUT_ENABLED=true`.
+
+## Price capture extension
+
+Build and load (Chrome or Edge):
+
+```sh
+npm run build:extension        # writes extension/dist
+```
+
+1. Open `chrome://extensions`, turn on Developer mode, choose **Load unpacked** and pick the `extension/` folder.
+2. In the popup, choose your market (Console or PC).
+3. Use the Web App as normal. Every transfer-market search you run is recorded.
+4. **Download CSV**, then import it in Market Lab > Import prices or with `npm run market -- import --file`.
+
+The response format is checked defensively (`src/market/capture.ts`): anything that doesn't look like a
+transfer-market search result is skipped, never guessed. The field names follow the Web App's known payload and
+weren't verified against FC 27 from the build sandbox, so the first real capture confirms them. Promo, Icon and
+Hero items only match once those cards exist in the card database; until then they're reported as unmatched.
 
 ## Use it
 
