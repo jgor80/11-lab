@@ -1,0 +1,7 @@
+node_modules/
+*.sqlite
+*.sqlite-*
+.wrangler/
+# Third-party downloads stay local until their terms are approved
+data/raw/
+out/

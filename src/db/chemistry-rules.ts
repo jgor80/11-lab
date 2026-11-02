@@ -1,0 +1,30 @@
+// Reads a chemistry rule version as plain data for the (upcoming) deterministic chemistry engine.
+import type { Db } from "./sqlite.js";
+
+export interface ChemistryRules {
+  id: string;
+  season: string;
+  status: "unverified" | "verified" | "retired";
+  /** thresholds.club = [2, 4, 7] means 2 players -> 1 point, 4 -> 2, 7 -> 3 */
+  thresholds: Record<"club" | "league" | "nation", number[]>;
+  modifiers: Record<string, number>;
+}
+
+export function loadChemistryRules(db: Db, versionId?: string, season = "FC27"): ChemistryRules {
+  const v = (versionId
+    ? db.prepare("SELECT id, season, status FROM chemistry_rule_versions WHERE id = ?").get(versionId)
+    : db.prepare("SELECT id, season, status FROM chemistry_rule_versions WHERE season = ? AND is_active = 1").get(season)) as
+    | { id: string; season: string; status: ChemistryRules["status"] }
+    | undefined;
+  if (!v) throw new Error(`No chemistry rule version ${versionId ?? `active for ${season}`}`);
+  const thresholds: ChemistryRules["thresholds"] = { club: [], league: [], nation: [] };
+  const rows = db
+    .prepare("SELECT link_type, players_required FROM chemistry_thresholds WHERE rule_version_id = ? ORDER BY points")
+    .all(v.id) as { link_type: keyof ChemistryRules["thresholds"]; players_required: number }[];
+  for (const r of rows) thresholds[r.link_type].push(r.players_required);
+  const modifiers = Object.fromEntries(
+    (db.prepare("SELECT key, value FROM chemistry_modifiers WHERE rule_version_id = ?").all(v.id) as { key: string; value: number }[])
+      .map((m) => [m.key, m.value]),
+  );
+  return { id: v.id, season: v.season, status: v.status, thresholds, modifiers };
+}
