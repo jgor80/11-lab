@@ -13,6 +13,7 @@ import {
   createMarketService,
   isTransferMarketSearch,
   summarizeSearch,
+  lowestBelievable,
   type MarketCard,
 } from "../src/market/index.js";
 import { mergeRows } from "../extension/src/store.js";
@@ -49,6 +50,15 @@ describe("summarizeSearch", () => {
       { ea_item_id: 239085, asset_id: 239085, rating: 88, platform: "console", price: 20_500, listings: 2, observed_at: A },
       { ea_item_id: 50_331_649, asset_id: 331_649, rating: 88, platform: "console", price: 900, listings: 1, observed_at: A },
     ]);
+  });
+
+  it("skips a lone listing far below the rest (possible coin transfer), but not two that agree", () => {
+    expect(lowestBelievable([20_000, 4_000, 21_000, 20_500])).toBe(20_000);
+    expect(lowestBelievable([20_000, 4_000, 4_100, 21_000])).toBe(4_000);
+    expect(lowestBelievable([20_000, 4_000])).toBe(4_000);
+    expect(lowestBelievable([20_000, 12_000, 21_000])).toBe(12_000);
+    const [r] = summarizeSearch({ auctionInfo: [listing(239085, 21_000), listing(239085, 900), listing(239085, 20_500)] }, { observed_at: A, platform: "console" });
+    expect(r).toMatchObject({ price: 20_500, listings: 3 });
   });
 
   it("skips non-players, junk and unexpected shapes instead of guessing", () => {
