@@ -1,0 +1,4 @@
+card_key,person_key,name,version,overall,positions,club,league,nation,skill_moves,weak_foot,pac,def,standing_tackle,interceptions,playstyles,roles
+t-1,p-1,Test Player A,base,84,CDM|CM,Test FC,Test League,Testland,3,4,70,82,85,84,Intercept+|Anticipate,CDM:Holding++|CM:Box-to-Box+
+t-2,p-1,Test Player A,TOTW 1,86,CDM|CM,Test FC,Test League,Testland,3,4,72,84,87,86,Intercept+|Anticipate+,CDM:Holding++
+t-3,p-2,Test Player B,base,80,XX,Test FC,Test League,Testland,,,,,,,,

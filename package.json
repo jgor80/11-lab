@@ -1,0 +1,24 @@
+{
+  "name": "xi-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "XI Lab: chemistry-aware FUT squad optimizer. This package holds the data model and import pipeline.",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "db:migrate": "tsx scripts/migrate.ts",
+    "import": "tsx scripts/import.ts",
+    "export:d1": "tsx scripts/export-d1.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.12",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
