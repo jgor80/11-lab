@@ -1,12 +1,36 @@
 {
   "manifest_version": 3,
-  "name": "XI Lab price capture",
-  "version": "0.1.0",
-  "description": "Records the transfer-market prices the EA FC Web App already shows you, for XI Lab's Market Lab. Never searches, clicks, bids or lists.",
-  "permissions": ["storage"],
-  "action": { "default_popup": "popup.html", "default_title": "XI Lab price capture" },
+  "name": "XI Lab capture",
+  "version": "0.2.0",
+  "description": "Copies what the EA FC Web App already shows you, for XI Lab: transfer-market prices from your own searches, and your club when you open it. Never searches, clicks, bids, lists or moves anything.",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "XI Lab capture"
+  },
   "content_scripts": [
-    { "matches": ["https://www.ea.com/*ultimate-team/web-app*"], "js": ["dist/hook.js"], "run_at": "document_start", "world": "MAIN", "all_frames": false },
-    { "matches": ["https://www.ea.com/*ultimate-team/web-app*"], "js": ["dist/relay.js"], "run_at": "document_start", "all_frames": false }
+    {
+      "matches": [
+        "https://www.ea.com/*ultimate-team/web-app*"
+      ],
+      "js": [
+        "dist/hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.ea.com/*ultimate-team/web-app*"
+      ],
+      "js": [
+        "dist/relay.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
   ]
 }

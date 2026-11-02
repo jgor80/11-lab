@@ -1,7 +1,12 @@
 import type { CaptureRow } from "../../src/market/capture.js";
+import type { ClubItem, ClubNames } from "../../src/club/capture.js";
 
 export interface Stored {
   rows?: CaptureRow[];
+  /** Your club and squad items, newest copy of each. */
+  club?: ClubItem[];
+  last_club?: string;
+  names?: ClubNames;
   platform?: "console" | "pc";
   paused?: boolean;
   last_capture?: string;
@@ -19,4 +24,16 @@ export function mergeRows(have: CaptureRow[], add: CaptureRow[]): CaptureRow[] {
     m.set(k, prev ? { ...prev, price: Math.min(prev.price, r.price), listings: Math.max(prev.listings, r.listings) } : r);
   }
   return [...m.values()].sort((a, b) => a.observed_at.localeCompare(b.observed_at)).slice(-MAX_ROWS);
+}
+
+export const emptyNames = (): ClubNames => ({ players: {}, teams: {}, leagues: {}, nations: {} });
+
+export function mergeNames(have: ClubNames | undefined, add: Partial<ClubNames>): ClubNames {
+  const h = have ?? emptyNames();
+  return {
+    players: { ...h.players, ...(add.players ?? {}) },
+    teams: { ...h.teams, ...(add.teams ?? {}) },
+    leagues: { ...h.leagues, ...(add.leagues ?? {}) },
+    nations: { ...h.nations, ...(add.nations ?? {}) },
+  };
 }

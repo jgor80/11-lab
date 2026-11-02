@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8" /><title>XI Lab price capture</title>
+<html><head><meta charset="utf-8" /><title>XI Lab capture</title>
 <style>
   body { width: 320px; margin: 0; padding: 12px; background: #0b0f14; color: #e6edf3; font: 14px/1.4 system-ui, sans-serif; }
   h1 { font-size: 13px; letter-spacing: .12em; color: #4ade80; margin: 0 0 6px; }
@@ -9,7 +9,7 @@
   .warn { color: #fbbf24; font-size: 12px; }
 </style></head>
 <body>
-  <h1>XI LAB · PRICE CAPTURE</h1>
+  <h1>XI LAB · CAPTURE</h1>
   <div class="row"><span class="big" id="count">0</span><span class="muted">price observations stored</span></div>
   <div class="muted" id="last">No captures yet.</div>
   <div class="row"><label>Market <select id="platform"><option value="console">Console</option><option value="pc">PC</option></select></label>
@@ -17,6 +17,11 @@
   <div class="row"><button id="download">Download CSV</button><button id="copy">Copy CSV</button><button id="clear">Clear</button></div>
   <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never searches, clicks, bids or lists, and nothing leaves your browser until you export it.</p>
   <p class="muted">Import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
+  <h1 style="margin-top:14px">MY CLUB</h1>
+  <div class="row"><span class="big" id="club-count">0</span><span class="muted">club items stored</span></div>
+  <div class="muted" id="club-last">Open your Club in the Web App to capture it.</div>
+  <div class="row"><button id="club-download">Download club file</button><button id="club-clear">Clear club</button></div>
+  <p class="muted">Open Club &gt; Players (and Managers) and page through it: each page the Web App loads is copied. Import the file on gafferbot.app/fut (My cards &gt; Import club). Club reading is new and not yet checked against FC 27.</p>
   <p class="warn">Any third-party software on EA's site carries some account risk.</p>
   <script src="dist/popup.js"></script>
 </body></html>
