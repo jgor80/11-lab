@@ -151,6 +151,7 @@ function renderHeader() {
     <button data-act="mode" data-mode="optimize">Optimize</button>
     <button data-act="mode" data-mode="squads">My squads</button>
     <button data-act="mode" data-mode="add">Add card</button>
+    <a class="btn" href="./market.html">Market Lab</a>
   </nav>`;
 }
 
@@ -201,6 +202,7 @@ function renderSlotPanel() {
   return `
     <div class="small muted">${esc(s.slot)} · ${esc(s.card.positions.join("/"))} · ${esc(s.card.club ?? "?")} · ${esc(s.card.nation ?? "?")} · ${esc(s.card.league ?? "?")} ${s.card.source === "fixture" ? `<span class="badge b-demo">demo</span>` : ""}</div>
     <h3 style="font-size:20px">${esc(s.card.name)}</h3>
+    <div class="small"><a href="./market.html#card/${encodeURIComponent(s.card.id)}">View Market Intelligence →</a></div>
     <div class="row"><div class="bigchem">${d.chemistry}/${d.max}</div><div class="grow small">${evidenceBadge(d.evidence)}<div>${esc(d.summary)}</div></div></div>
     <h4>Chemistry diagnosis</h4>${links}
     ${d.manager_bonus ? `<div class="small">Manager bonus +${d.manager_bonus}</div>` : ""}

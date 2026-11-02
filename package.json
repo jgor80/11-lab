@@ -12,6 +12,7 @@
     "fetch:ea": "tsx scripts/fetch-ea-ratings.ts",
     "import": "tsx scripts/import.ts",
     "export:d1": "tsx scripts/export-d1.ts",
+    "market": "tsx scripts/market.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "vite --config web/vite.config.ts",
