@@ -207,7 +207,13 @@ npm run build:extension        # writes extension/dist
 The response format is checked defensively (`src/market/capture.ts`): anything that doesn't look like a
 transfer-market search result is skipped, never guessed. The field names follow the Web App's known payload and
 weren't verified against FC 27 from the build sandbox, so the first real capture confirms them. Promo, Icon and
-Hero items only match once those cards exist in the card database; until then they're reported as unmatched.
+Hero items only match once those cards exist in the card database. Until then their captured prices are **held**,
+privately (`market_capture_holds`, migration 0005), with EA's ids for the item (rare flag, club, league, nation,
+position) so you can tell what they are. They link automatically on a later import once a card with that EA item id
+exists (the manual card CSV takes an optional `ea_item_id` column), or by hand from Import prices > "Captured items
+not in your cards yet" (only cards with the same rating are offered). `npm run market -- held` lists them and
+`npm run market -- relink` links what it can. Linked rows keep their original capture times and say how they were
+linked.
 
 ## Use it
 

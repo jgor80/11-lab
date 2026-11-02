@@ -16,9 +16,21 @@ export interface CaptureRow {
   /** How many active listings with a Buy Now price that page held for this item. */
   listings: number;
   observed_at: string;
+  /** EA's own ids for the item, kept so a capture for a card XI Lab doesn't have yet can be identified later. */
+  details?: CaptureDetails;
 }
 
-export const CAPTURE_CSV_HEADER = "ea_item_id,asset_id,rating,platform,price,observed_at,kind,listings";
+/** EA ids as the Web App sends them (not names). rare_flag 0/1 = common/rare base; higher = a special version. */
+export interface CaptureDetails {
+  rare_flag?: number;
+  team_id?: number;
+  league_id?: number;
+  nation_id?: number;
+  position?: string;
+}
+
+export const CAPTURE_CSV_HEADER = "ea_item_id,asset_id,rating,platform,price,observed_at,kind,listings,rare_flag,team_id,league_id,nation_id,position";
+export const CAPTURE_DETAIL_FIELDS = ["rare_flag", "team_id", "league_id", "nation_id", "position"] as const;
 
 /** Transfer-market SEARCH responses only (not your trade pile, watch list or unassigned items). */
 export function isTransferMarketSearch(url: string): boolean {
@@ -31,6 +43,23 @@ export function isTransferMarketSearch(url: string): boolean {
 }
 
 const int = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null);
+const nonNeg = (v: unknown): number | undefined => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined);
+
+function detailsOf(item: Record<string, unknown>): CaptureDetails | undefined {
+  const pos = typeof item.preferredPosition === "string" && /^[A-Z]{2,3}$/.test(item.preferredPosition) ? item.preferredPosition : undefined;
+  const d: CaptureDetails = { rare_flag: nonNeg(item.rareflag), team_id: int(item.teamid) ?? undefined, league_id: int(item.leagueId) ?? undefined, nation_id: int(item.nation) ?? undefined, position: pos };
+  const kept = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) as CaptureDetails;
+  return Object.keys(kept).length ? kept : undefined;
+}
+
+/** Details parsed back from an imported capture CSV row. */
+export function captureDetailsFromRow(r: Record<string, unknown>): CaptureDetails | undefined {
+  const n = (v: unknown) => (v === undefined || v === null || v === "" || !Number.isInteger(Number(v)) || Number(v) < 0 ? undefined : Number(v));
+  const pos = typeof r.position === "string" && /^[A-Z]{2,3}$/.test(r.position.trim()) ? r.position.trim() : undefined;
+  const d: CaptureDetails = { rare_flag: n(r.rare_flag), team_id: n(r.team_id), league_id: n(r.league_id), nation_id: n(r.nation_id), position: pos };
+  const kept = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) as CaptureDetails;
+  return Object.keys(kept).length ? kept : undefined;
+}
 
 /** One row per item on the page: the lowest active Buy Now price and how many listings it was the lowest of. */
 export function summarizeSearch(json: unknown, opts: { observed_at: string; platform: "console" | "pc" }): CaptureRow[] {
@@ -50,7 +79,8 @@ export function summarizeSearch(json: unknown, opts: { observed_at: string; plat
       cur.listings++;
       cur.price = Math.min(cur.price, bin);
     } else {
-      by.set(id, { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at });
+      const details = detailsOf(item);
+      by.set(id, { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at, ...(details ? { details } : {}) });
     }
   }
   return [...by.values()];
@@ -58,5 +88,8 @@ export function summarizeSearch(json: unknown, opts: { observed_at: string; plat
 
 /** CSV the Market Lab importer reads (web Import screen, `npm run market -- import`, Gaffer Bot import route). */
 export function captureRowsToCsv(rows: CaptureRow[]): string {
-  return [CAPTURE_CSV_HEADER, ...rows.map((r) => [r.ea_item_id, r.asset_id ?? "", r.rating ?? "", r.platform, r.price, r.observed_at, "lowest_bin", r.listings].join(","))].join("\n");
+  return [
+    CAPTURE_CSV_HEADER,
+    ...rows.map((r) => [r.ea_item_id, r.asset_id ?? "", r.rating ?? "", r.platform, r.price, r.observed_at, "lowest_bin", r.listings, ...CAPTURE_DETAIL_FIELDS.map((k) => r.details?.[k] ?? "")].join(",")),
+  ].join("\n");
 }

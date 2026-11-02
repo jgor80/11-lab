@@ -2,6 +2,7 @@
 // Prices from licensed/public sources are shared; user imports are private to their owner.
 import type { BasketMembership } from "./baskets.js";
 import type { MarketCard, Platform, PriceObservation } from "./types.js";
+import type { UnmatchedCapture } from "./import.js";
 
 export interface PriceQuery {
   card_ids?: string[];
@@ -17,6 +18,14 @@ export interface PriceStore {
   query(owner_id: string, q: PriceQuery): Promise<PriceObservation[]>;
   /** owner_id null = shared (only for licensed/demo sources). Duplicates (same card, platform, observed_at, source, owner) are skipped. */
   insert(owner_id: string | null, rows: PriceObservation[]): Promise<{ inserted: number; skipped: number }>;
+}
+
+/** Captured prices for EA items not in the card database yet, private to the owner, linked once the card exists. */
+export interface CaptureHoldStore {
+  hold(owner_id: string, rows: UnmatchedCapture[]): Promise<{ held: number; skipped: number }>;
+  list(owner_id: string): Promise<UnmatchedCapture[]>;
+  /** Drop held rows (after they were linked to a card). */
+  release(owner_id: string, rows: UnmatchedCapture[]): Promise<void>;
 }
 
 export interface MembershipStore {
@@ -136,5 +145,25 @@ export class MemoryMarketCardSource implements MarketCardSource {
   }
   async catalogue() {
     return this.cards.filter((c) => c.source !== "user");
+  }
+}
+
+const holdKey = (h: UnmatchedCapture) => `${h.ea_item_id}|${h.observation.platform}|${h.observation.observed_at}`;
+
+export class MemoryCaptureHoldStore implements CaptureHoldStore {
+  protected rows = new Map<string, Map<string, UnmatchedCapture>>();
+  async hold(owner_id: string, rows: UnmatchedCapture[]) {
+    const m = this.rows.get(owner_id) ?? new Map<string, UnmatchedCapture>();
+    let held = 0;
+    for (const r of rows) if (!m.has(holdKey(r))) m.set(holdKey(r), structuredClone(r)), held++;
+    this.rows.set(owner_id, m);
+    return { held, skipped: rows.length - held };
+  }
+  async list(owner_id: string) {
+    return [...(this.rows.get(owner_id)?.values() ?? [])].map((r) => structuredClone(r));
+  }
+  async release(owner_id: string, rows: UnmatchedCapture[]) {
+    const m = this.rows.get(owner_id);
+    for (const r of rows) m?.delete(holdKey(r));
   }
 }

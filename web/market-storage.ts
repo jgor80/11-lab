@@ -1,6 +1,6 @@
 // Browser adapters for Market Lab: imported prices, watchlist and basket memberships in localStorage.
 // Demo prices are regenerated on every load (never stored), so they can't be mistaken for imported data.
-import { MemoryMembershipStore, MemoryPriceStore, MemoryWatchlistStore, type BasketMembership, type MarketCard, type MarketCardSource, type PriceObservation, type WatchItem } from "../src/market/index.js";
+import { MemoryCaptureHoldStore, MemoryMembershipStore, MemoryPriceStore, MemoryWatchlistStore, type BasketMembership, type MarketCard, type MarketCardSource, type PriceObservation, type UnmatchedCapture, type WatchItem } from "../src/market/index.js";
 import type { Squad, WorkspaceCard } from "../src/workspace/index.js";
 
 const read = <T>(key: string, fallback: T): T => {
@@ -34,6 +34,30 @@ export class LocalPriceStore extends MemoryPriceStore {
   }
   clearImported() {
     write(PRICES, []);
+  }
+}
+
+const HOLDS = "xilab.market.holds.v1";
+/** Captured prices for EA items not in your cards yet, kept in this browser until the card is added. */
+export class LocalCaptureHoldStore extends MemoryCaptureHoldStore {
+  constructor(private owner: string) {
+    super();
+    void super.hold(owner, read<UnmatchedCapture[]>(HOLDS, []));
+  }
+  private async persist() {
+    write(HOLDS, await super.list(this.owner));
+  }
+  override async hold(o: string, rows: UnmatchedCapture[]) {
+    const r = await super.hold(o, rows);
+    await this.persist();
+    return r;
+  }
+  override async release(o: string, rows: UnmatchedCapture[]) {
+    await super.release(o, rows);
+    await this.persist();
+  }
+  clear() {
+    write(HOLDS, []);
   }
 }
 

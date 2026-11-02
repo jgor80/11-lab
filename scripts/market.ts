@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { migrate, openDb } from "../src/db/sqlite.js";
-import { SqliteMarketCardSource, SqliteMembershipStore, SqlitePriceStore, SqliteWatchlistStore, loadMarketRules, loadPriceSources } from "../src/db/market-store.js";
+import { SqliteCaptureHoldStore, SqliteMarketCardSource, SqliteMembershipStore, SqlitePriceStore, SqliteWatchlistStore, loadMarketRules, loadPriceSources } from "../src/db/market-store.js";
 import { DEFAULT_BASKETS, createMarketService, type Platform, type SignalStatus } from "../src/market/index.js";
 
 const { positionals, values } = parseArgs({
@@ -32,6 +32,7 @@ const svc = createMarketService({
   memberships: new SqliteMembershipStore(db, DEFAULT_BASKETS),
   watchlists: new SqliteWatchlistStore(db),
   cards: new SqliteMarketCardSource(db),
+  holds: new SqliteCaptureHoldStore(db),
   sources: loadPriceSources(db),
   rules: loadMarketRules(db),
 });
@@ -44,7 +45,7 @@ switch (positionals[0]) {
   case "import": {
     if (!values.file) throw new Error("--file is required");
     const r = await svc.importPriceHistory(owner, readFileSync(values.file, "utf8"), { source_id: values.source });
-    console.log(`${r.accepted} accepted, ${r.inserted} new, ${r.skipped} already stored, ${r.duplicates} duplicate rows, ${r.rejected.length} rejected.`);
+    console.log(`${r.accepted} accepted, ${r.inserted} new, ${r.skipped} already stored, ${r.duplicates} duplicate rows, ${r.rejected.length} rejected, ${r.held} held for cards not in the database, ${r.linked_from_held} linked from earlier holds.`);
     for (const x of r.rejected.slice(0, 20)) console.log(`  line ${x.line}: ${x.reason}`);
     break;
   }
@@ -58,10 +59,16 @@ switch (positionals[0]) {
   case "scan":
     out(await svc.findMarketOpportunities(owner, { platform, as_of, status: values.status?.split(",") as SignalStatus[] | undefined }));
     break;
+  case "held":
+    out(await svc.getHeldCaptures(owner));
+    break;
+  case "relink":
+    out(await svc.relinkHeldCaptures(owner));
+    break;
   case "sources":
     for (const s of svc.getDataSourceStatus()) console.log(`[${s.status}] ${s.name}: ${s.status_note}`);
     break;
   default:
-    console.error("Commands: import, overview, card, scan, sources");
+    console.error("Commands: import, overview, card, scan, held, relink, sources");
     process.exit(1);
 }

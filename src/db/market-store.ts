@@ -1,10 +1,11 @@
-// SQLite (node:sqlite) adapters for Market Lab over migrations/0004_market_lab.sql. Card ids are player_cards.id
+// SQLite (node:sqlite) adapters for Market Lab over migrations/0004_market_lab.sql and 0005_market_capture.sql. Card ids are player_cards.id
 // as strings, so the same canonical id is used by the squad builder, the importer and Market Lab.
 // Gaffer Bot implements the same interfaces over its Postgres `fut` schema.
 import type { Db } from "./sqlite.js";
 import type { BasketDefinition, BasketMembership } from "../market/baskets.js";
 import type { MarketRules } from "../market/rules.js";
-import type { MarketCardSource, MembershipStore, PriceQuery, PriceStore, WatchItem, WatchlistStore } from "../market/store.js";
+import type { CaptureHoldStore, MarketCardSource, MembershipStore, PriceQuery, PriceStore, WatchItem, WatchlistStore } from "../market/store.js";
+import type { UnmatchedCapture } from "../market/import.js";
 import type { CardCategory, MarketCard, Platform, PriceObservation, PriceSource } from "../market/types.js";
 
 export class SqlitePriceStore implements PriceStore {
@@ -98,6 +99,32 @@ export class SqliteWatchlistStore implements WatchlistStore {
   }
   async remove(owner_id: string, card_id: string, platform: Platform) {
     this.db.prepare("DELETE FROM market_watchlist WHERE owner_id = ? AND card_id = ? AND platform = ?").run(owner_id, Number(card_id), platform);
+  }
+}
+
+export class SqliteCaptureHoldStore implements CaptureHoldStore {
+  constructor(private db: Db) {}
+  async hold(owner_id: string, rows: UnmatchedCapture[]) {
+    const st = this.db.prepare(
+      "INSERT OR IGNORE INTO market_capture_holds (owner_id, ea_item_id, asset_id, rating, platform, observed_at, details, observation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    let held = 0;
+    for (const r of rows)
+      held += Number(st.run(owner_id, r.ea_item_id, r.asset_id, r.rating, r.observation.platform, r.observation.observed_at, r.details ? JSON.stringify(r.details) : null, JSON.stringify(r.observation)).changes);
+    return { held, skipped: rows.length - held };
+  }
+  async list(owner_id: string): Promise<UnmatchedCapture[]> {
+    return (this.db.prepare("SELECT * FROM market_capture_holds WHERE owner_id = ? ORDER BY observed_at").all(owner_id) as Record<string, unknown>[]).map((r) => ({
+      ea_item_id: Number(r.ea_item_id),
+      asset_id: (r.asset_id as number | null) ?? null,
+      rating: (r.rating as number | null) ?? null,
+      ...(r.details ? { details: JSON.parse(String(r.details)) } : {}),
+      observation: JSON.parse(String(r.observation)),
+    }));
+  }
+  async release(owner_id: string, rows: UnmatchedCapture[]) {
+    const st = this.db.prepare("DELETE FROM market_capture_holds WHERE owner_id = ? AND ea_item_id = ? AND platform = ? AND observed_at = ?");
+    for (const r of rows) st.run(owner_id, r.ea_item_id, r.observation.platform, r.observation.observed_at);
   }
 }
 
