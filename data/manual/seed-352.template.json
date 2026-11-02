@@ -1,0 +1,178 @@
+{
+  "_readme": "Copy to seed-352.json and fill every null from your FC 27 game. slot is a unique name you choose (e.g. LCB); position is the position code the in-game 3-5-2 puts there (GK, CB, CDM, CM, CAM, LM, RM, ST...). card.positions are every position the card plays (primary plus alternatives). expected_chemistry and expected_in_game.total are what the game shows; the test compares the engine to them. The four locked players come from the brief; their slots are left for you. Names after the four locked ones come from Jeff's later brief (Rodman, Caicedo, Anderson, Kayode plus a Premier League defensive core); change any that are wrong.",
+  "formation": "3-5-2",
+  "manager": {
+    "nation": "United States",
+    "league": "NWSL"
+  },
+  "expected_in_game": {
+    "total": null
+  },
+  "slots": [
+    {
+      "slot": null,
+      "position": null,
+      "locked": true,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Wilson",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": true,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Haaland",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": true,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Bruno",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": true,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Van Dijk",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Rodman",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Caicedo",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Anderson",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": "Kayode",
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": null,
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": null,
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    },
+    {
+      "slot": null,
+      "position": null,
+      "locked": false,
+      "expected_chemistry": null,
+      "card": {
+        "name": null,
+        "club": null,
+        "league": null,
+        "nation": null,
+        "positions": [],
+        "is_icon": false,
+        "is_hero": false
+      }
+    }
+  ]
+}
