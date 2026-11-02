@@ -18,6 +18,14 @@ export interface Stored {
   pc_learned?: boolean;
   pc_note?: string | null;
   pc_at?: string;
+  /** Run the price check by itself while the Web App is open (opt-in). */
+  pc_auto?: boolean;
+  /** First UTC day the price check searched (the daily cap ramps up from it). */
+  pc_first_day?: string;
+  /** Search times in the last 24 hours. */
+  pc_log?: string[];
+  /** No searches until then (set after EA throttles or asks for a captcha). */
+  pc_cooldown_until?: string | null;
   /** Auto-upload to gafferbot.app: the helper key, and what was last sent. */
   helper_key?: string | null;
   sent_until?: string;
