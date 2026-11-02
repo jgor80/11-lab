@@ -33,6 +33,15 @@ recalculation, net-loss rejection), comparison and save-as-new. `web/` is the mo
 top of it (`npm run dev`). The website, API and MCP tools all call the same service. See
 `docs/squad-workspace.md`.
 
+## Market Lab
+
+`src/market/` is Market Lab, Stage A: point-in-time price history with a provider adapter interface and a
+working CSV/JSON import, benchmark indexes with point-in-time basket membership, rule-based market regime,
+relative strength, momentum and mean reversion, a trade thesis simulator (5% tax as a rules value), Card
+Intelligence, Compare in My Squad and a watchlist. `src/intelligence/` is the one card-utility scorer shared with
+the squad builder. No live price feed is authorised, so it ships with a clearly labelled demo dataset. Research
+and decision support only: it never buys, sells or bids. See `docs/market-lab.md`.
+
 ## Use it
 
 ```sh

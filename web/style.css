@@ -91,3 +91,7 @@ table.cmp tr.diff td { background: #60a5fa14; }
 }
 label.check { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; color: var(--text); margin: 6px 0; }
 .left, .sheet { align-self: start; }
+a { color: var(--info); }
+a.btn { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--text); text-decoration: none; white-space: nowrap; }
+a.btn:hover { border-color: var(--muted); }
+a.btn.on { border-color: var(--accent); color: var(--accent); }
