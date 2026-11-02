@@ -18,6 +18,12 @@ export interface Stored {
   pc_learned?: boolean;
   pc_note?: string | null;
   pc_at?: string;
+  /** Auto-upload to gafferbot.app: the helper key, and what was last sent. */
+  helper_key?: string | null;
+  sent_until?: string;
+  club_sent?: string;
+  last_upload?: string;
+  upload_note?: string;
 }
 
 export const MAX_ROWS = 20_000;

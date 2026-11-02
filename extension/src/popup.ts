@@ -1,14 +1,20 @@
 import { captureRowsToCsv } from "../../src/market/capture.js";
 import { buildClubExport } from "../../src/club/capture.js";
 import { emptyNames } from "./store.js";
+import { looksLikeHelperKey } from "../../src/market/upload.js";
 import type { Stored } from "./store.js";
 
 declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function refresh() {
-  chrome.storage.local.get(["rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note"], (s: Stored) => {
+  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note"], (s: Stored) => {
     const today = new Date().toISOString().slice(0, 10);
+    $("gb-status").textContent = s.helper_key
+      ? `Connected (key ending ${s.helper_key.slice(-4)}). ${s.last_upload ? `Last upload ${new Date(s.last_upload).toLocaleString()}.` : "Nothing uploaded yet."} ${s.upload_note ?? ""}`.trim()
+      : `Not connected. Prices stay in this browser until you export them. ${s.upload_note ?? ""}`.trim();
+    $<HTMLButtonElement>("gb-now").disabled = !s.helper_key;
+    $<HTMLButtonElement>("gb-forget").disabled = !s.helper_key;
     $("pc-count").textContent = String(s.pc_day === today ? s.pc_count ?? 0 : 0);
     $("pc-status").textContent = s.pc_running ? `Running… ${s.pc_note ?? ""}`.trim() : s.pc_stopped ?? (s.pc_learned ? "Ready. Press Start." : "Run one search yourself first, then press Start.");
     $<HTMLButtonElement>("pc-start").disabled = !!s.pc_running;
@@ -22,6 +28,20 @@ function refresh() {
 }
 const csv = (cb: (text: string) => void) => chrome.storage.local.get(["rows"], (s: Stored) => cb(captureRowsToCsv(s.rows ?? [])));
 
+$("gb-save").addEventListener("click", () => {
+  const key = $<HTMLInputElement>("gb-key").value.trim();
+  if (!looksLikeHelperKey(key)) return void ($("gb-status").textContent = "That isn't a helper key. Copy it from Market Lab > Import prices > Connect helper.");
+  $<HTMLInputElement>("gb-key").value = "";
+  // A new key starts a fresh upload: everything stored is sent once (the server skips duplicates).
+  chrome.storage.local.set({ helper_key: key, sent_until: "", club_sent: "", upload_note: "Saved. Uploading…" }, () => chrome.runtime.sendMessage({ upload: "now" }, () => void chrome.runtime.lastError));
+});
+$("gb-now").addEventListener("click", () => {
+  $("gb-status").textContent = "Uploading…";
+  chrome.runtime.sendMessage({ upload: "now" }, () => { void chrome.runtime.lastError; refresh(); });
+});
+$("gb-forget").addEventListener("click", () => {
+  if (confirm("Disconnect Gaffer Bot? Nothing more is uploaded. (Turn the key off on gafferbot.app too if you won't use it again.)")) chrome.storage.local.set({ helper_key: null, upload_note: "" }, refresh);
+});
 $("platform").addEventListener("change", (e) => chrome.storage.local.set({ platform: (e.target as HTMLSelectElement).value }));
 $("paused").addEventListener("change", (e) => chrome.storage.local.set({ paused: (e.target as HTMLInputElement).checked }));
 $("download").addEventListener("click", () =>

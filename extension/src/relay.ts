@@ -1,5 +1,5 @@
 // Extension side (isolated world): receives summaries from hook.ts and keeps them in the extension's own
-// storage until you export them. Nothing is sent anywhere.
+// storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
 import { buildQueue, remainingToday } from "../../src/market/pricecheck.js";
 import { mergeNames, mergeRows, type Stored } from "./store.js";
@@ -31,6 +31,9 @@ window.addEventListener("message", (e: MessageEvent) => {
     }
     if (Array.isArray(d.club)) chrome.storage.local.set({ club: mergeClubItems(s.club ?? [], d.club), last_club: now });
     if (d.names && typeof d.names === "object") chrome.storage.local.set({ names: mergeNames(s.names, d.names) });
+    if (Array.isArray(d.rows) || Array.isArray(d.club)) {
+      try { chrome.runtime.sendMessage({ upload: "soon" }, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ }
+    }
   });
 });
 
