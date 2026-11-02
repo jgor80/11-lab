@@ -14,15 +14,16 @@ import {
 } from "../src/chemistry/index.js";
 import { seed352, locked } from "./fixtures/chemistry/seed-352.js";
 
-// The seeded DB rule version, so tests follow whatever the migration ships.
+// The active seeded rule version (fc27-community-v1), so tests follow whatever the migrations ship.
 const db = openDb(":memory:");
 migrate(db);
-const v0 = loadChemistryRules(db);
+const v1 = loadChemistryRules(db);
+const v0 = loadChemistryRules(db, "fc27-community-v0"); // old reading: manager adds chemistry directly
 
 const rules = (patch: Partial<ChemistryRules> = {}, mods: Record<string, number> = {}): ChemistryRules => ({
-  ...v0,
+  ...v1,
   ...patch,
-  modifiers: { ...v0.modifiers, ...mods },
+  modifiers: { ...v1.modifiers, ...mods },
 });
 
 let n = 0;
@@ -39,12 +40,12 @@ const squad = (cards: SquadCard[], manager?: SquadInput["manager"]): SquadInput 
   manager,
   slots: cards.map((card, i) => ({ slot: `S${i + 1}`, position: "CM", card })),
 });
-const chem = (input: SquadInput, r = v0) => computeSquadChemistry(input, r);
+const chem = (input: SquadInput, r = v1) => computeSquadChemistry(input, r);
 
 describe("rule version", () => {
-  it("loads fc27-community-v0 from the DB as unverified", () => {
-    expect(v0).toMatchObject({ id: "fc27-community-v0", status: "unverified" });
-    expect(v0.thresholds).toEqual({ club: [2, 4, 7], league: [3, 5, 8], nation: [2, 5, 8] });
+  it("loads the active rule version from the DB as unverified", () => {
+    expect(v1).toMatchObject({ id: "fc27-community-v1", status: "unverified" });
+    expect(v1.thresholds).toEqual({ club: [2, 4, 7], league: [3, 5, 8], nation: [2, 5, 8] });
   });
 
   it("maps counts to points and next thresholds", () => {
@@ -54,16 +55,16 @@ describe("rule version", () => {
   });
 
   it("refuses incomplete rules and warns on modifiers it doesn't apply", () => {
-    const { ["player.max_chemistry"]: _, ...noMax } = v0.modifiers;
-    expect(() => chem(squad([c()]), { ...v0, modifiers: noMax })).toThrow(RulesError);
-    expect(() => chem(squad([c()]), rules({ thresholds: { ...v0.thresholds, club: [4, 2] } }))).toThrow(RulesError);
+    const { ["player.max_chemistry"]: _, ...noMax } = v1.modifiers;
+    expect(() => chem(squad([c()]), { ...v1, modifiers: noMax })).toThrow(RulesError);
+    expect(() => chem(squad([c()]), rules({ thresholds: { ...v1.thresholds, club: [4, 2] } }))).toThrow(RulesError);
     expect(chem(squad([c()]), rules({}, { "loan.bonus": 1 })).warnings.join()).toMatch(/"loan.bonus"/);
   });
 
   it("reads thresholds from the rule version, not from code", () => {
     const pair = squad([c({ club: "X" }), c({ club: "X" })]);
     expect(chem(pair).players[0]!.links.club).toBe(1);
-    expect(chem(pair, rules({ thresholds: { ...v0.thresholds, club: [3, 4, 7] } })).players[0]!.links.club).toBe(0);
+    expect(chem(pair, rules({ thresholds: { ...v1.thresholds, club: [3, 4, 7] } })).players[0]!.links.club).toBe(0);
   });
 });
 
@@ -103,17 +104,21 @@ describe("individual chemistry", () => {
     expect(r.players[0]!.breakdown.league).toMatchObject({ count: 2, next_threshold: 3, needed_for_next: 1 });
   });
 
-  it("adds the manager bonus once for a nation or league match", () => {
-    const r = chem(squad([c({ nation: "United States" }), c({ nation: "United States", league: "NWSL" }), c()], { nation: "united states", league: "NWSL" }));
+  it("adds the manager to their nation's and league's counts (active rules)", () => {
+    // One US player alone: nation count 1 + manager 1 = 2 -> 1 point, no direct bonus.
+    const r = chem(squad([c({ nation: "United States" }), c()], { nation: "united states", league: "NWSL" }));
+    expect(r.players[0]).toMatchObject({ manager_bonus: 0, chemistry: 1 });
+    expect(r.players[0]!.breakdown.nation).toMatchObject({ count: 2, points: 1, next_threshold: 5 });
+    expect(r.players[1]!.chemistry).toBe(0);
+  });
+
+  it("v0's reading: manager adds +1 chemistry once for a nation or league match", () => {
+    const r = chem(squad([c({ nation: "United States" }), c({ nation: "United States", league: "NWSL" }), c()], { nation: "united states", league: "NWSL" }), v0);
     expect(r.players.map((p) => p.manager_bonus)).toEqual([1, 1, 0]);
     expect(r.players[0]!.chemistry).toBe(2); // nation pair 1 + manager 1
     expect(r.players[1]!.notes.join()).toMatch(/matches manager nation and league/);
   });
 
-  it("supports the alternative reading where the manager adds to counts", () => {
-    const r = chem(squad([c({ nation: "N" })], { nation: "N" }), rules({}, { "manager.bonus": 0, "manager.nation_count": 1 }));
-    expect(r.players[0]).toMatchObject({ manager_bonus: 0, chemistry: 1 });
-  });
 
   it("explains missing metadata instead of guessing", () => {
     const p = chem(squad([c({ club: null, league: null })])).players[0]!;
@@ -149,7 +154,7 @@ describe("Icons and Heroes", () => {
   });
 
   it("applies always-max only when the rule version says so", () => {
-    // A lone Hero still gets nation 1 + 1 bonus = 2 -> 1 point under v0.
+    // A lone Hero still gets nation 1 + 1 bonus = 2 -> 1 point under v1.
     const solo = squad([c({ is_hero: true })]);
     expect(chem(solo).players[0]!.chemistry).toBe(1);
     expect(chem(solo, rules({}, { "hero.always_max": 1 })).players[0]!.chemistry).toBe(3);
@@ -177,19 +182,21 @@ describe("seed scenario: 3-5-2, four locked players, US/NWSL manager (fixture ca
   const by = Object.fromEntries(r.players.map((p) => [p.slot, p]));
 
   it("matches the hand-calculated chemistry", () => {
-    // League 1 has 5 players (2 pts), League 2 and NWSL have 3 (1 pt). See the fixture for the rest.
+    // League 1 has 5 players (2 pts), League 2 has 3 (1 pt). NWSL and United States have 3 each plus the
+    // manager = 4 (1 pt each). See the fixture for the rest.
     expect(Object.fromEntries(r.players.map((p) => [p.slot, p.chemistry]))).toEqual({
-      GK: 3, LCB: 3, CB: 3, RCB: 2, LCDM: 2, RCDM: 1, CAM: 2, LM: 3, RM: 3, LST: 3, RST: 2,
+      GK: 3, LCB: 3, CB: 3, RCB: 2, LCDM: 2, RCDM: 1, CAM: 2, LM: 2, RM: 2, LST: 2, RST: 2,
     });
-    expect(r.total).toBe(27);
+    expect(r.total).toBe(24);
     expect(r.max).toBe(33);
-    expect(r.rule_version).toBe("fc27-community-v0");
+    expect(r.rule_version).toBe("fc27-community-v1");
   });
 
   it("shows each link and what's needed for the next point", () => {
     expect(by.RCB!.breakdown.nation).toMatchObject({ key: "Nation 2", count: 1, points: 0, next_threshold: 2, needed_for_next: 1 });
-    expect(by.LM!.breakdown.nation).toMatchObject({ key: "United States", count: 3, points: 1, needed_for_next: 2 });
-    expect(by.LM!.manager_bonus).toBe(1);
+    expect(by.LM!.breakdown.nation).toMatchObject({ key: "United States", count: 4, points: 1, needed_for_next: 1 });
+    expect(by.LM!.breakdown.league).toMatchObject({ key: "NWSL", count: 4, points: 1, needed_for_next: 1 });
+    expect(by.LM!.manager_bonus).toBe(0);
     expect(by.GK!.notes.join()).toMatch(/Capped at 3 \(links add up to 4\)/);
   });
 
@@ -197,9 +204,9 @@ describe("seed scenario: 3-5-2, four locked players, US/NWSL manager (fixture ca
     const { after, diff } = previewSwap(
       seed352, "RCDM",
       { name: "Fixture new CDM", club: "Club 10", league: "League 1", nation: "Nation 2", positions: ["CDM"] },
-      v0,
+      v1,
     );
-    expect(after.total).toBe(28);
+    expect(after.total).toBe(25);
     expect(diff.delta).toBe(1);
     const ch = Object.fromEntries(diff.changes.map((x) => [x.slot, x]));
     expect(Object.keys(ch).sort()).toEqual(["CAM", "RCB", "RCDM", "RST"]);
@@ -211,12 +218,12 @@ describe("seed scenario: 3-5-2, four locked players, US/NWSL manager (fixture ca
   });
 
   it("removing a player reports the loss", () => {
-    const { diff } = previewSwap(seed352, "LM", null, v0);
+    const { diff } = previewSwap(seed352, "LM", null, v1);
     const ch = Object.fromEntries(diff.changes.map((x) => [x.slot, x]));
-    expect(ch.LM).toMatchObject({ before: 3, after: 0, name_after: null, reasons: ["Fixture LM removed"] });
-    // NWSL drops to 2 (0 pts), US to 2 (still 1 pt): RM and LST lose 1 each but keep the manager bonus.
-    expect(ch.RM).toMatchObject({ before: 3, after: 2 });
-    expect(diff.delta).toBe(-5);
+    expect(ch.LM).toMatchObject({ before: 2, after: 0, name_after: null, reasons: ["Fixture LM removed"] });
+    // NWSL and US drop to 2 + manager = 3: still 1 point each, so nobody else changes.
+    expect(diff.changes.map((x) => x.slot)).toEqual(["LM"]);
+    expect(diff.delta).toBe(-2);
   });
 
   it("keeps the locked players in the squad", () => {

@@ -20,20 +20,20 @@ const { diff } = previewSwap(squad, "RCDM", newCard, rules); // who gains or los
    the extra counts the rule version gives them (`icon.*`, `hero.*`). An Icon also adds
    `icon.every_league_bonus` to every other league in the XI.
 3. A player's points per link type come from the thresholds (`[2, 4, 7]` = 1 point at 2, 2 at 4, 3 at 7).
-4. `manager.bonus` adds direct chemistry to a player matching the manager's nation or league (once).
-   `manager.nation_count` / `manager.league_count` support the other reading, where the manager adds
-   to counts instead. The seeded rule version uses `manager.bonus`.
+4. The manager adds `manager.nation_count` to their nation's count and `manager.league_count` to their
+   league's count, like an extra player. The active version, `fc27-community-v1`, uses this (Jeff
+   checked it in game on 2026-11-02). `manager.bonus` (direct +1 chemistry) is the older reading kept
+   in `fc27-community-v0`, which is now inactive.
 5. Chemistry is capped at `player.max_chemistry`; team max is that x 11.
 
 Nothing above is a hardcoded number. A modifier key the engine doesn't know shows up as a warning.
 
 ## Trust
 
-`fc27-community-v0` is **unverified** (community thresholds). While a rule version is unverified, every
+`fc27-community-v1` is **unverified** (community thresholds). While a rule version is unverified, every
 result has `evidence: "hypothesis"` and `full_chemistry_verified: false`, even at 33/33. To verify it,
 fill `data/manual/seed-352.json` from the game (copy the template) and run `npm test`: the gated test in
 `tests/chemistry-seed-real.test.ts` compares the engine with the in-game numbers. Open questions to
-check in game: whether the manager adds direct chemistry or counts, and whether Icons/Heroes get
-automatic max chemistry in FC 27 (`icon.always_max`, `hero.always_max`, off by default).
+check in game: whether Icons/Heroes get automatic max chemistry in FC 27 (`icon.always_max`, `hero.always_max`, off by default).
 
 Bump `ENGINE_VERSION` in `engine.ts` when the interpretation of a rule changes.
