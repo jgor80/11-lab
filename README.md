@@ -25,9 +25,17 @@ not code, so they can be corrected without a release.
 npm install
 npm test
 npm run import -- --list                                   # adapters + each source's terms status
+
+# EA's FC 27 ratings feed: download a snapshot (~200 polite requests), then import it
+npm run fetch:ea                                           # -> data/raw/ea-ratings/<date>/
+npm run import -- --adapter ea-ratings --file data/raw/ea-ratings/<date>
+
+# Cards you enter yourself
 npm run import -- --adapter manual --file data/manual/my-club.csv
-npm run import -- --adapter kaggle-fc27 --file data/raw/fc27.csv --accept-terms "Your Name"
 ```
+
+`data/raw/` is git-ignored: this repo is public and the card data belongs to EA, so snapshots and the
+database stay on the machine that runs the import. See `docs/data-sources.md` before adding a source.
 
 Data lands in `xi-lab.sqlite`. For Cloudflare D1:
 

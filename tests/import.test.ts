@@ -41,7 +41,8 @@ describe("manual CSV import", () => {
       { position_code: "CDM", name: "Holding", level: "plusplus" },
       { position_code: "CM", name: "Box-to-Box", level: "plus" },
     ]);
-    expect(count(db, "SELECT value n FROM card_attributes WHERE card_id=? AND attribute_key='standing_tackle'", card.id as number)).toBe(85);
+    expect(db.prepare("SELECT standing_tackle, interceptions, pac, sho FROM card_attributes WHERE card_id=?").get(card.id as number))
+      .toEqual({ standing_tackle: 85, interceptions: 84, pac: 70, sho: null });
     expect(count(db, "SELECT COUNT(*) n FROM card_positions WHERE card_id=? AND is_primary=1 AND position_code='CDM'", card.id as number)).toBe(1);
   });
 
@@ -91,6 +92,15 @@ describe("Kaggle FC 27 adapter", () => {
 
   it("fails loudly on a file with the wrong columns", () => {
     expect(() => readKaggleFc27("a,b\n1,2\n")).toThrow(/missing columns/);
+  });
+});
+
+describe("schema", () => {
+  it("has one card_attributes column for every attribute_defs key", () => {
+    const cols = (db.prepare("PRAGMA table_info(card_attributes)").all() as { name: string }[])
+      .map((c) => c.name).filter((c) => c !== "card_id").sort();
+    const keys = (db.prepare("SELECT key FROM attribute_defs").all() as { key: string }[]).map((k) => k.key).sort();
+    expect(cols).toEqual(keys);
   });
 });
 

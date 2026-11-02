@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "description": "XI Lab: chemistry-aware FUT squad optimizer. This package holds the data model and import pipeline.",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "db:migrate": "tsx scripts/migrate.ts",
+    "fetch:ea": "tsx scripts/fetch-ea-ratings.ts",
     "import": "tsx scripts/import.ts",
     "export:d1": "tsx scripts/export-d1.ts",
     "typecheck": "tsc --noEmit",

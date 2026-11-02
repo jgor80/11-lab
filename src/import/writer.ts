@@ -1,6 +1,7 @@
 // Writes normalized card records into the database with full provenance.
 // Idempotent: re-running the same input updates rows in place instead of duplicating them.
 import { createHash } from "node:crypto";
+import type { StatementSync } from "node:sqlite";
 import type { Db } from "../db/sqlite.js";
 import { CardRecord, type AdapterOutput } from "./record.js";
 
@@ -22,6 +23,16 @@ export interface ImportSummary {
 export class TermsError extends Error {}
 
 type Row = Record<string, unknown>;
+
+// A full EA snapshot is ~20k cards; preparing each statement once keeps the import fast.
+const statements = new WeakMap<Db, Map<string, StatementSync>>();
+function prep(db: Db, sql: string): StatementSync {
+  let byDb = statements.get(db);
+  if (!byDb) statements.set(db, (byDb = new Map()));
+  let stmt = byDb.get(sql);
+  if (!stmt) byDb.set(sql, (stmt = db.prepare(sql)));
+  return stmt;
+}
 
 export function importRecords(db: Db, output: AdapterOutput, opts: ImportOptions): ImportSummary {
   const source = db.prepare("SELECT id, terms_status FROM data_sources WHERE id = ?").get(opts.sourceId) as
@@ -79,13 +90,25 @@ export function importRecords(db: Db, output: AdapterOutput, opts: ImportOptions
         rejected++;
         continue;
       }
-      writeCard(db, rec, opts.sourceId, run.id);
-      written++;
+      db.exec("SAVEPOINT card");
+      try {
+        writeCard(db, rec, opts.sourceId, run.id);
+        db.exec("RELEASE card");
+        written++;
+      } catch (e) {
+        db.exec("ROLLBACK TO card");
+        db.exec("RELEASE card");
+        reject.run(run.id, rec.card_key, `write failed: ${(e as Error).message}`);
+        rejected++;
+      }
     }
     db.prepare(
       `UPDATE import_runs SET status = 'succeeded', finished_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-       records_seen = ?, records_written = ?, records_rejected = ? WHERE id = ?`,
-    ).run(output.records.length + output.rejected.length, written, rejected, run.id);
+       records_seen = ?, records_written = ?, records_rejected = ?, notes = ? WHERE id = ?`,
+    ).run(
+      output.records.length + output.rejected.length, written, rejected,
+      output.warnings?.length ? output.warnings.join("\n") : null, run.id,
+    );
     db.exec("COMMIT");
   } catch (e) {
     db.exec("ROLLBACK");
@@ -99,15 +122,14 @@ export function importRecords(db: Db, output: AdapterOutput, opts: ImportOptions
 
 function upsertNamed(db: Db, table: "nations" | "leagues", v: { name: string; ea_id?: number; gender?: string }): number {
   if (v.ea_id !== undefined) {
-    const hit = db.prepare(`SELECT id FROM ${table} WHERE ea_id = ?`).get(v.ea_id) as Row | undefined;
+    const hit = prep(db, `SELECT id FROM ${table} WHERE ea_id = ?`).get(v.ea_id) as Row | undefined;
     if (hit) return hit.id as number;
   }
   const extraCol = table === "leagues" ? ", gender" : "";
   const extraVal = table === "leagues" ? ", ?" : "";
   const params: (string | number | null)[] = [v.name, v.ea_id ?? null];
   if (table === "leagues") params.push(v.gender ?? null);
-  const row = db
-    .prepare(
+  const row = prep(db, 
       `INSERT INTO ${table} (name, ea_id${extraCol}) VALUES (?, ?${extraVal})
        ON CONFLICT(name) DO UPDATE SET ea_id = COALESCE(${table}.ea_id, excluded.ea_id) RETURNING id`,
     )
@@ -117,15 +139,13 @@ function upsertNamed(db: Db, table: "nations" | "leagues", v: { name: string; ea
 
 function upsertClub(db: Db, v: { name: string; ea_id?: number }, leagueId: number | null): number {
   if (v.ea_id !== undefined) {
-    const hit = db.prepare("SELECT id FROM clubs WHERE ea_id = ?").get(v.ea_id) as Row | undefined;
+    const hit = prep(db, "SELECT id FROM clubs WHERE ea_id = ?").get(v.ea_id) as Row | undefined;
     if (hit) return hit.id as number;
   }
-  const hit = db
-    .prepare("SELECT id FROM clubs WHERE name = ? AND league_id IS ?")
+  const hit = prep(db, "SELECT id FROM clubs WHERE name = ? AND league_id IS ?")
     .get(v.name, leagueId) as Row | undefined;
   if (hit) return hit.id as number;
-  const row = db
-    .prepare("INSERT INTO clubs (name, league_id, ea_id) VALUES (?, ?, ?) RETURNING id")
+  const row = prep(db, "INSERT INTO clubs (name, league_id, ea_id) VALUES (?, ?, ?) RETURNING id")
     .get(v.name, leagueId, v.ea_id ?? null) as Row;
   return row.id as number;
 }
@@ -136,17 +156,16 @@ function upsertPlayer(db: Db, rec: CardRecord, sourceId: string, nationId: numbe
     nationId, p.height_cm ?? null, p.weight_kg ?? null, p.preferred_foot ?? null];
   // The same footballer from two sources merges on the EA person id when both have it.
   if (p.ea_person_id !== undefined) {
-    const hit = db.prepare("SELECT id FROM players WHERE ea_person_id = ?").get(p.ea_person_id) as Row | undefined;
+    const hit = prep(db, "SELECT id FROM players WHERE ea_person_id = ?").get(p.ea_person_id) as Row | undefined;
     if (hit) {
-      db.prepare(
+      prep(db, 
         `UPDATE players SET common_name=?, first_name=?, last_name=?, birth_date=?, gender=?, nation_id=?,
          height_cm=?, weight_kg=?, preferred_foot=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`,
       ).run(...values, hit.id as number);
       return hit.id as number;
     }
   }
-  const row = db
-    .prepare(
+  const row = prep(db, 
       `INSERT INTO players (common_name, first_name, last_name, birth_date, gender, nation_id, height_cm, weight_kg,
          preferred_foot, ea_person_id, source_id, source_person_key)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -168,8 +187,7 @@ function writeCard(db: Db, rec: CardRecord, sourceId: string, runId: number): vo
   const clubId = rec.club ? upsertClub(db, rec.club, leagueId) : null;
   const playerId = upsertPlayer(db, rec, sourceId, nationId);
 
-  const card = db
-    .prepare(
+  const card = prep(db, 
       `INSERT INTO player_cards (player_id, ea_item_id, season, version, rarity, overall, nation_id, league_id, club_id,
          is_icon, is_hero, skill_moves, weak_foot, attacking_work_rate, defensive_work_rate, height_cm, image_url,
          availability, evidence, source_id, source_card_key, source_updated_at, import_run_id)
@@ -195,16 +213,20 @@ function writeCard(db: Db, rec: CardRecord, sourceId: string, runId: number): vo
 
   // Child rows are replaced wholesale so a re-import reflects removals too.
   for (const t of ["card_positions", "card_attributes", "card_playstyles", "card_role_familiarity"]) {
-    db.prepare(`DELETE FROM ${t} WHERE card_id = ?`).run(cardId);
+    prep(db, `DELETE FROM ${t} WHERE card_id = ?`).run(cardId);
   }
-  const insPos = db.prepare("INSERT OR IGNORE INTO card_positions (card_id, position_code, is_primary) VALUES (?, ?, ?)");
+  const insPos = prep(db, "INSERT OR IGNORE INTO card_positions (card_id, position_code, is_primary) VALUES (?, ?, ?)");
   rec.positions.forEach((p, i) => insPos.run(cardId, p, i === 0 ? 1 : 0));
 
-  const insAttr = db.prepare("INSERT INTO card_attributes (card_id, attribute_key, value) VALUES (?, ?, ?)");
-  for (const [k, v] of Object.entries(rec.attributes)) insAttr.run(cardId, k, v);
+  // Keys were checked against attribute_defs before we got here, so they are safe to use as column names.
+  const attrKeys = Object.keys(rec.attributes).sort();
+  if (attrKeys.length) {
+    const sql = `INSERT INTO card_attributes (card_id, ${attrKeys.join(", ")}) VALUES (?${", ?".repeat(attrKeys.length)})`;
+    prep(db, sql).run(cardId, ...attrKeys.map((k) => rec.attributes[k]!));
+  }
 
-  const upPs = db.prepare("INSERT INTO playstyles (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET name=playstyles.name RETURNING id");
-  const insPs = db.prepare(
+  const upPs = prep(db, "INSERT INTO playstyles (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET name=playstyles.name RETURNING id");
+  const insPs = prep(db, 
     `INSERT INTO card_playstyles (card_id, playstyle_id, is_plus) VALUES (?, ?, ?)
      ON CONFLICT(card_id, playstyle_id) DO UPDATE SET is_plus = MAX(is_plus, excluded.is_plus)`,
   );
@@ -213,11 +235,11 @@ function writeCard(db: Db, rec: CardRecord, sourceId: string, runId: number): vo
     insPs.run(cardId, id, ps.plus ? 1 : 0);
   }
 
-  const upRole = db.prepare(
+  const upRole = prep(db, 
     `INSERT INTO roles (position_code, name) VALUES (?, ?)
      ON CONFLICT(position_code, name) DO UPDATE SET name=roles.name RETURNING id`,
   );
-  const insRole = db.prepare("INSERT OR REPLACE INTO card_role_familiarity (card_id, role_id, level) VALUES (?, ?, ?)");
+  const insRole = prep(db, "INSERT OR REPLACE INTO card_role_familiarity (card_id, role_id, level) VALUES (?, ?, ?)");
   for (const r of rec.roles) {
     const id = (upRole.get(r.position, r.role) as Row).id as number;
     insRole.run(cardId, id, r.level);

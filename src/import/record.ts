@@ -60,4 +60,12 @@ export interface AdapterOutput {
   rejected: { ref: string; reason: string }[];
   /** When the source says its data was taken, if it says. */
   snapshotAt?: string;
+  /** Things the adapter skipped or couldn't map. Stored on the import run, never dropped silently. */
+  warnings?: string[];
+}
+
+/** What an adapter hands the importer: the records, plus the bytes to hash into import_runs.input_sha256. */
+export interface LoadedInput {
+  output: AdapterOutput;
+  hashInput: Uint8Array | string;
 }

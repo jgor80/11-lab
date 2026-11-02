@@ -113,7 +113,7 @@ CREATE TABLE players (
 CREATE TABLE player_cards (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
   player_id          INTEGER NOT NULL REFERENCES players(id),
-  ea_item_id         INTEGER UNIQUE,
+  ea_item_id         INTEGER,                      -- EA reuses base item ids every season, so unique per season
   season             TEXT NOT NULL,                -- 'FC27'
   version            TEXT NOT NULL,                -- 'base', 'TOTW 3', 'Icon', 'Evolution'...
   rarity             TEXT,                         -- 'gold rare', 'silver common'...
@@ -137,7 +137,8 @@ CREATE TABLE player_cards (
   source_updated_at  TEXT,
   import_run_id      INTEGER REFERENCES import_runs(id),
   imported_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  UNIQUE (source_id, source_card_key)
+  UNIQUE (source_id, source_card_key),
+  UNIQUE (season, ea_item_id)
 );
 CREATE INDEX idx_cards_player ON player_cards(player_id);
 CREATE INDEX idx_cards_overall ON player_cards(season, overall DESC);
@@ -151,13 +152,52 @@ CREATE TABLE card_positions (
 );
 CREATE INDEX idx_card_positions_pos ON card_positions(position_code);
 
+-- One row per card, one column per attribute. Column names must match attribute_defs.key (a test checks this).
+-- Wide rather than key/value so filters like "standing_tackle >= 85 AND short_passing >= 85" stay simple,
+-- and a full load writes ~20k rows instead of ~800k, which matters under D1's rows-written limits.
 CREATE TABLE card_attributes (
-  card_id        INTEGER NOT NULL REFERENCES player_cards(id) ON DELETE CASCADE,
-  attribute_key  TEXT NOT NULL REFERENCES attribute_defs(key),
-  value          INTEGER NOT NULL CHECK (value BETWEEN 1 AND 99),
-  PRIMARY KEY (card_id, attribute_key)
+  card_id             INTEGER PRIMARY KEY REFERENCES player_cards(id) ON DELETE CASCADE,
+  pac                 INTEGER CHECK (pac BETWEEN 1 AND 99),
+  sho                 INTEGER CHECK (sho BETWEEN 1 AND 99),
+  pas                 INTEGER CHECK (pas BETWEEN 1 AND 99),
+  dri                 INTEGER CHECK (dri BETWEEN 1 AND 99),
+  def                 INTEGER CHECK (def BETWEEN 1 AND 99),
+  phy                 INTEGER CHECK (phy BETWEEN 1 AND 99),
+  acceleration        INTEGER CHECK (acceleration BETWEEN 1 AND 99),
+  sprint_speed        INTEGER CHECK (sprint_speed BETWEEN 1 AND 99),
+  positioning         INTEGER CHECK (positioning BETWEEN 1 AND 99),
+  finishing           INTEGER CHECK (finishing BETWEEN 1 AND 99),
+  shot_power          INTEGER CHECK (shot_power BETWEEN 1 AND 99),
+  long_shots          INTEGER CHECK (long_shots BETWEEN 1 AND 99),
+  volleys             INTEGER CHECK (volleys BETWEEN 1 AND 99),
+  penalties           INTEGER CHECK (penalties BETWEEN 1 AND 99),
+  vision              INTEGER CHECK (vision BETWEEN 1 AND 99),
+  crossing            INTEGER CHECK (crossing BETWEEN 1 AND 99),
+  free_kick_accuracy  INTEGER CHECK (free_kick_accuracy BETWEEN 1 AND 99),
+  short_passing       INTEGER CHECK (short_passing BETWEEN 1 AND 99),
+  long_passing        INTEGER CHECK (long_passing BETWEEN 1 AND 99),
+  curve               INTEGER CHECK (curve BETWEEN 1 AND 99),
+  agility             INTEGER CHECK (agility BETWEEN 1 AND 99),
+  balance             INTEGER CHECK (balance BETWEEN 1 AND 99),
+  reactions           INTEGER CHECK (reactions BETWEEN 1 AND 99),
+  ball_control        INTEGER CHECK (ball_control BETWEEN 1 AND 99),
+  dribbling           INTEGER CHECK (dribbling BETWEEN 1 AND 99),
+  composure           INTEGER CHECK (composure BETWEEN 1 AND 99),
+  interceptions       INTEGER CHECK (interceptions BETWEEN 1 AND 99),
+  heading_accuracy    INTEGER CHECK (heading_accuracy BETWEEN 1 AND 99),
+  defensive_awareness INTEGER CHECK (defensive_awareness BETWEEN 1 AND 99),
+  standing_tackle     INTEGER CHECK (standing_tackle BETWEEN 1 AND 99),
+  sliding_tackle      INTEGER CHECK (sliding_tackle BETWEEN 1 AND 99),
+  jumping             INTEGER CHECK (jumping BETWEEN 1 AND 99),
+  stamina             INTEGER CHECK (stamina BETWEEN 1 AND 99),
+  strength            INTEGER CHECK (strength BETWEEN 1 AND 99),
+  aggression          INTEGER CHECK (aggression BETWEEN 1 AND 99),
+  gk_diving           INTEGER CHECK (gk_diving BETWEEN 1 AND 99),
+  gk_handling         INTEGER CHECK (gk_handling BETWEEN 1 AND 99),
+  gk_kicking          INTEGER CHECK (gk_kicking BETWEEN 1 AND 99),
+  gk_positioning      INTEGER CHECK (gk_positioning BETWEEN 1 AND 99),
+  gk_reflexes         INTEGER CHECK (gk_reflexes BETWEEN 1 AND 99)
 );
-CREATE INDEX idx_card_attr_value ON card_attributes(attribute_key, value);
 
 CREATE TABLE card_playstyles (
   card_id      INTEGER NOT NULL REFERENCES player_cards(id) ON DELETE CASCADE,
