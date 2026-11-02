@@ -1,5 +1,5 @@
 // Price-history import: CSV or JSON in, validated point-in-time observations out, every rejected row with a reason.
-import { parseCsv } from "../import/csv.js";
+import { parseCsv } from "../shared/csv.js";
 import { DEFAULT_MARKET_RULES, type MarketRules } from "./rules.js";
 import { assertUsable } from "./sources.js";
 import { PLATFORMS, type Platform, type PriceObservation, type PriceSource } from "./types.js";
