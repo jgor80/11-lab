@@ -1,5 +1,6 @@
 -- fc27-community-v1: same as v0, except the manager adds +1 to the count of their nation and of their
--- league (Jeff, from the game, 2026-11-02) instead of +1 chemistry directly. v0 is kept for history.
+-- league (Jeff, from the game, 2026-11-02) instead of +1 chemistry directly, and an in-position Icon always
+-- has max chemistry while a Hero does not (Jeff, 2026-11-02). v0 is kept for history.
 
 UPDATE chemistry_rule_versions SET is_active = 0 WHERE id = 'fc27-community-v0';
 
@@ -17,4 +18,6 @@ INSERT INTO chemistry_modifiers (rule_version_id, key, value, description)
 
 INSERT INTO chemistry_modifiers (rule_version_id, key, value, description) VALUES
   ('fc27-community-v1', 'manager.nation_count', 1, 'The manager adds 1 to the count of their nation (Jeff, in game, 2026-11-02).'),
-  ('fc27-community-v1', 'manager.league_count', 1, 'The manager adds 1 to the count of their league (Jeff, in game, 2026-11-02).');
+  ('fc27-community-v1', 'manager.league_count', 1, 'The manager adds 1 to the count of their league (Jeff, in game, 2026-11-02).'),
+  ('fc27-community-v1', 'icon.always_max', 1, 'An Icon in position always has max chemistry (Jeff, in game, 2026-11-02).'),
+  ('fc27-community-v1', 'hero.always_max', 0, 'Heroes do NOT get automatic max chemistry (Jeff, in game, 2026-11-02).');

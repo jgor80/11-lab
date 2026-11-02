@@ -33,7 +33,8 @@ Nothing above is a hardcoded number. A modifier key the engine doesn't know show
 `fc27-community-v1` is **unverified** (community thresholds). While a rule version is unverified, every
 result has `evidence: "hypothesis"` and `full_chemistry_verified: false`, even at 33/33. To verify it,
 fill `data/manual/seed-352.json` from the game (copy the template) and run `npm test`: the gated test in
-`tests/chemistry-seed-real.test.ts` compares the engine with the in-game numbers. Open questions to
-check in game: whether Icons/Heroes get automatic max chemistry in FC 27 (`icon.always_max`, `hero.always_max`, off by default).
+`tests/chemistry-seed-real.test.ts` compares the engine with the in-game numbers. In `fc27-community-v1`
+an in-position Icon always has max chemistry (`icon.always_max = 1`) and a Hero does not
+(`hero.always_max = 0`), per Jeff in game on 2026-11-02.
 
 Bump `ENGINE_VERSION` in `engine.ts` when the interpretation of a rule changes.

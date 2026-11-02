@@ -153,8 +153,13 @@ describe("Icons and Heroes", () => {
     expect(r.players[1]!.breakdown.nation).toMatchObject({ count: 3, points: 1 });
   });
 
-  it("applies always-max only when the rule version says so", () => {
-    // A lone Hero still gets nation 1 + 1 bonus = 2 -> 1 point under v1.
+  it("gives an in-position Icon max chemistry, but not a Hero (active rules)", () => {
+    expect(v1.modifiers).toMatchObject({ "icon.always_max": 1, "hero.always_max": 0 });
+    const icon = chem(squad([c({ is_icon: true }), c()])).players[0]!;
+    expect(icon.chemistry).toBe(3);
+    expect(icon.notes.join()).toMatch(/Icon in position: always max/);
+    expect(chem(squad([c({ is_icon: true, positions: ["ST"] })])).players[0]!.chemistry).toBe(0);
+    // A lone Hero gets nation 1 + 1 bonus = 2 -> 1 point, no automatic max.
     const solo = squad([c({ is_hero: true })]);
     expect(chem(solo).players[0]!.chemistry).toBe(1);
     expect(chem(solo, rules({}, { "hero.always_max": 1 })).players[0]!.chemistry).toBe(3);
