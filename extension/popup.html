@@ -10,23 +10,29 @@
 </style></head>
 <body>
   <h1>XI LAB · CAPTURE</h1>
+  <h1 style="margin-top:6px">GAFFER BOT</h1>
+  <div class="muted" id="gb-status">Not connected. Prices stay in this browser until you export them.</div>
+  <div class="row"><input id="gb-key" type="password" placeholder="Paste helper key (xlh_…)" style="flex:1;min-width:0;background:#18202b;color:inherit;border:1px solid #243040;border-radius:8px;padding:6px 8px" /><button id="gb-save">Save</button></div>
+  <div class="row"><button id="gb-now">Upload now</button><button id="gb-forget">Disconnect</button></div>
+  <p class="muted">Get a key on gafferbot.app/fut: Market Lab &gt; Import prices &gt; Connect helper. Once saved, new prices and your club are sent to your XI Lab account every few minutes. The key can only upload; it can't read anything.</p>
   <div class="row"><span class="big" id="count">0</span><span class="muted">price observations stored</span></div>
   <div class="muted" id="last">No captures yet.</div>
   <div class="row"><label>Market <select id="platform"><option value="console">Console (Xbox + PlayStation)</option><option value="pc">PC</option></select></label>
     <label><input type="checkbox" id="paused" /> Pause</label></div>
   <div class="row"><button id="download">Download CSV</button><button id="copy">Copy CSV</button><button id="clear">Clear</button></div>
-  <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never clicks, bids or lists, and nothing leaves your browser until you export it. It searches only when you start Price check below.</p>
-  <p class="muted">Import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
+  <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never clicks, bids or lists. Nothing leaves your browser unless you export it or connect Gaffer Bot above. It searches only when you start Price check below.</p>
+  <p class="muted">Without Gaffer Bot connected: import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
   <h1 style="margin-top:14px">MY CLUB</h1>
   <div class="row"><span class="big" id="club-count">0</span><span class="muted">club items stored</span></div>
   <div class="muted" id="club-last">Open your Club in the Web App to capture it.</div>
   <div class="row"><button id="club-download">Download club file</button><button id="club-clear">Clear club</button></div>
   <p class="muted">Open Club &gt; Players (and Managers) and page through it: each page the Web App loads is copied. Import the file on gafferbot.app/fut (My cards &gt; Import club). Club reading is new and not yet checked against FC 27.</p>
   <h1 style="margin-top:14px">PRICE CHECK</h1>
-  <div class="row"><span class="big" id="pc-count">0</span><span class="muted">of 100 searches used today</span></div>
+  <div class="row"><span class="big" id="pc-count">0</span><span class="muted" id="pc-cap">of 30 searches used today</span></div>
+  <div class="muted" id="pc-budget">Last hour 0 · 3 hours 0 · 24 hours 0</div>
   <div class="muted" id="pc-status">Run one search yourself first, then press Start.</div>
-  <div class="row"><button id="pc-start">Start</button><button id="pc-stop">Stop</button></div>
-  <p class="muted">With the Web App open and signed in, the helper searches your club players that have no price from the last 12 hours, one every 10&ndash;20 seconds, with a few minutes' break every 12 searches, up to 100 a day. It only searches: it never bids, buys or lists. It stops by itself at any captcha, "too many actions" or error. Keep the Web App tab open while it runs.</p>
+  <div class="row"><button id="pc-start">Start</button><button id="pc-stop">Stop</button><label><input type="checkbox" id="pc-auto" /> Run automatically</label></div>
+  <p class="muted">With the Web App open and signed in, the helper searches your club players that have no price from the last 12 hours, one every 10&ndash;20 seconds, with a few minutes' break every 12 searches. Caps: 20 an hour, and 30 a day on the first day, rising by 10 a day to 100. With Run automatically on, it starts by itself (after your first search in the tab) and checks again about every 10 minutes within those caps; Stop also turns that off. It only searches: it never bids, buys or lists. It stops by itself at any captcha, "too many actions" or error, and after EA limits or checks the account it pauses for 24 hours. Keep the Web App tab open while it runs.</p>
   <p class="warn">Automatic searching carries more account risk than capturing your own searches. EA can restrict market access for it.</p>
   <p class="warn">Any third-party software on EA's site carries some account risk.</p>
   <script src="dist/popup.js"></script>

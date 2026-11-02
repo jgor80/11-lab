@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQueue, DAILY_CAP, delayBefore, isSafeSearch, learnTemplate, remainingToday, searchUrlFor, SESSION_LENGTH, stopReason } from "../src/market/pricecheck.js";
+import { buildQueue, cooldownUntil, DAILY_CAP, dailyCapFor, delayBefore, FIRST_DAY_CAP, HOURLY_CAP, inCooldown, isSafeSearch, isThrottle, learnTemplate, pruneLog, remainingToday, runLimit, searchBudget, searchUrlFor, SESSION_LENGTH, stopReason } from "../src/market/pricecheck.js";
 import type { ClubItem } from "../src/club/capture.js";
 import type { CaptureRow } from "../src/market/capture.js";
 
@@ -61,5 +61,33 @@ describe("price check", () => {
     expect(stopReason(429, null)).toMatch(/too many/);
     expect(stopReason(200, { code: 1 })).toMatch(/Unexpected/);
     expect(stopReason(500, null)).toMatch(/500/);
+  });
+});
+
+describe("price check safety caps", () => {
+  const now = new Date("2026-11-05T12:00:00Z");
+  it("ramps the daily cap from 30 by 10 a day to 100", () => {
+    expect(dailyCapFor(undefined, now)).toBe(FIRST_DAY_CAP);
+    expect(dailyCapFor("2026-11-05", now)).toBe(30);
+    expect(dailyCapFor("2026-11-03", now)).toBe(50);
+    expect(dailyCapFor("2026-10-01", now)).toBe(DAILY_CAP);
+  });
+
+  it("limits a run by the rolling hour as well as the day", () => {
+    const ago = (min: number) => new Date(now.getTime() - min * 60_000).toISOString();
+    const log = [...Array.from({ length: 15 }, (_, i) => ago(10 + i)), ago(200), ago(2000)];
+    expect(searchBudget(log, now)).toEqual({ h1: 15, h3: 15, h24: 16 });
+    expect(pruneLog(log, now)).toHaveLength(16);
+    expect(runLimit({ day: "2026-11-05", count: 15, firstDay: "2026-10-01", log }, now)).toBe(HOURLY_CAP - 15);
+    expect(runLimit({ day: "2026-11-05", count: 28, firstDay: "2026-11-05", log: [] }, now)).toBe(2);
+  });
+
+  it("cools down for a day after EA throttles or checks the account", () => {
+    expect(isThrottle(429) && isThrottle(458) && isThrottle(512) && isThrottle(494)).toBe(true);
+    expect(isThrottle(200) || isThrottle(401) || isThrottle(500)).toBe(false);
+    const until = cooldownUntil(now);
+    expect(inCooldown(until, new Date(now.getTime() + 23 * 3600_000))).toBe(true);
+    expect(inCooldown(until, new Date(now.getTime() + 25 * 3600_000))).toBe(false);
+    expect(inCooldown(null, now)).toBe(false);
   });
 });

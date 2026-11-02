@@ -11,7 +11,7 @@ export interface CaptureRow {
   asset_id: number | null;
   rating: number | null;
   platform: "console" | "pc";
-  /** Lowest Buy Now price among the active listings on this results page. */
+  /** Lowest believable Buy Now price among the active listings on this results page (see lowestBelievable). */
   price: number;
   /** How many active listings with a Buy Now price that page held for this item. */
   listings: number;
@@ -61,11 +61,27 @@ export function captureDetailsFromRow(r: Record<string, unknown>): CaptureDetail
   return Object.keys(kept).length ? kept : undefined;
 }
 
-/** One row per item on the page: the lowest active Buy Now price and how many listings it was the lowest of. */
+/** A lone listing under this share of the next few prices is treated as a possible coin transfer, not a price. */
+export const LONE_LOW_FACTOR = 0.5;
+
+/**
+ * The lowest believable Buy Now among one item's listings. A single listing far below the next few (under half
+ * their median) is often a coin transfer or a mistake, so with 3+ listings it is skipped; two or more low listings
+ * confirm each other and count.
+ */
+export function lowestBelievable(bins: number[]): number {
+  const s = [...bins].sort((a, b) => a - b);
+  if (s.length < 3) return s[0]!;
+  const next = s.slice(1, 4);
+  const mid = next[Math.floor((next.length - 1) / 2)]!;
+  return s[0]! < mid * LONE_LOW_FACTOR && s[1]! >= mid * LONE_LOW_FACTOR ? s[1]! : s[0]!;
+}
+
+/** One row per item on the page: the lowest believable active Buy Now price and how many listings it had. */
 export function summarizeSearch(json: unknown, opts: { observed_at: string; platform: "console" | "pc" }): CaptureRow[] {
   const list = (json as { auctionInfo?: unknown })?.auctionInfo;
   if (!Array.isArray(list)) return [];
-  const by = new Map<number, CaptureRow>();
+  const by = new Map<number, { row: CaptureRow; bins: number[] }>();
   for (const a of list as Record<string, unknown>[]) {
     if (!a || typeof a !== "object") continue;
     if (a.tradeState !== undefined && a.tradeState !== "active") continue;
@@ -75,15 +91,13 @@ export function summarizeSearch(json: unknown, opts: { observed_at: string; plat
     const bin = int(a.buyNowPrice);
     if (!id || !bin) continue;
     const cur = by.get(id);
-    if (cur) {
-      cur.listings++;
-      cur.price = Math.min(cur.price, bin);
-    } else {
+    if (cur) cur.bins.push(bin);
+    else {
       const details = detailsOf(item);
-      by.set(id, { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at, ...(details ? { details } : {}) });
+      by.set(id, { bins: [bin], row: { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at, ...(details ? { details } : {}) } });
     }
   }
-  return [...by.values()];
+  return [...by.values()].map(({ row, bins }) => ({ ...row, price: lowestBelievable(bins), listings: bins.length }));
 }
 
 /** CSV the Market Lab importer reads (web Import screen, `npm run market -- import`, Gaffer Bot import route). */
