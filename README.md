@@ -25,6 +25,14 @@ not code, so they can be corrected without a release.
 breakdown, links needed for the next point, manager and Icon/Hero rules, and swap previews showing who
 gains or loses. Pure TypeScript, no DB. See `docs/chemistry-engine.md`.
 
+## Squad workspace
+
+`src/workspace/` is the Intelligent Squad Builder's service layer: build and save squads, lock players,
+Chemistry Surgeon diagnosis per slot, the Squad Optimizer (cheapest valid swaps, full-squad
+recalculation, net-loss rejection), comparison and save-as-new. `web/` is the mobile-first screen on
+top of it (`npm run dev`). The website, API and MCP tools all call the same service. See
+`docs/squad-workspace.md`.
+
 ## Use it
 
 ```sh
