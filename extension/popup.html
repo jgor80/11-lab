@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>XI Lab price capture</title>
+<style>
+  body { width: 320px; margin: 0; padding: 12px; background: #0b0f14; color: #e6edf3; font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 13px; letter-spacing: .12em; color: #4ade80; margin: 0 0 6px; }
+  .muted { color: #8b98a8; font-size: 12px; } .big { font-size: 24px; font-weight: 700; }
+  button, select { background: #18202b; color: inherit; border: 1px solid #243040; border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .warn { color: #fbbf24; font-size: 12px; }
+</style></head>
+<body>
+  <h1>XI LAB · PRICE CAPTURE</h1>
+  <div class="row"><span class="big" id="count">0</span><span class="muted">price observations stored</span></div>
+  <div class="muted" id="last">No captures yet.</div>
+  <div class="row"><label>Market <select id="platform"><option value="console">Console</option><option value="pc">PC</option></select></label>
+    <label><input type="checkbox" id="paused" /> Pause</label></div>
+  <div class="row"><button id="download">Download CSV</button><button id="copy">Copy CSV</button><button id="clear">Clear</button></div>
+  <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never searches, clicks, bids or lists, and nothing leaves your browser until you export it.</p>
+  <p class="muted">Import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
+  <p class="warn">Any third-party software on EA's site carries some account risk.</p>
+  <script src="dist/popup.js"></script>
+</body></html>

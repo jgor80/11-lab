@@ -46,7 +46,7 @@ export interface SourcePermissions {
 export interface PriceSource {
   id: string;
   name: string;
-  kind: "demo" | "user_import" | "licensed_feed" | "official_api";
+  kind: "demo" | "user_import" | "browser_capture" | "licensed_feed" | "official_api";
   status: SourceStatus;
   /** Demo data is made up. Anything built on it says so. */
   is_demo: boolean;
@@ -69,6 +69,8 @@ export interface MarketCard extends WorkspaceCard {
   evolution_candidate?: boolean;
   live_upgrade?: boolean;
   tradeable?: boolean;
+  /** EA's item id, when the card came from EA's ratings feed. Lets captured Web App prices find the card. */
+  ea_item_id?: number;
 }
 
 export type Freshness = "fresh" | "stale" | "missing";

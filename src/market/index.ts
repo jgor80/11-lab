@@ -9,6 +9,7 @@ export * from "./signals.js";
 export * from "./thesis.js";
 export * from "./sources.js";
 export * from "./import.js";
+export * from "./capture.js";
 export * from "./store.js";
 export * from "./squad-link.js";
 export * from "./schema.js";

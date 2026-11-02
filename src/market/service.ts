@@ -345,10 +345,21 @@ export function createMarketService(deps: MarketDeps) {
 
     /** Import a CSV/JSON price history the user owns. Rows stay private to them. */
     async importPriceHistory(owner: string, text: string, opts: { source_id?: string; received_at?: string } = {}) {
-      const source = sourceById.get(opts.source_id ?? "user_import");
+      // A Web App capture file (from the XI Lab browser helper) is recognised by its header.
+      const captured = /^\s*ea_item_id,/.test(text);
+      const source = sourceById.get(opts.source_id ?? (captured ? "web_app_capture" : "user_import"));
       assertUsable(source, "storage");
       const cards = await deps.cards.list(owner);
-      const res = parsePriceImport(text, { source, received_at: opts.received_at ?? now(), knownCardIds: new Set(cards.map((c) => c.id)), rules });
+      const byEa = new Map<number, MarketCard>();
+      for (const c of cards) if (c.ea_item_id) byEa.set(c.ea_item_id, c);
+      const resolveEaItem = (ea: number, asset: number | null, rating: number | null) => {
+        const hit = byEa.get(ea);
+        if (hit && (rating === null || hit.rating === rating)) return hit.id;
+        // Base cards: EA's asset id is the base item id. Only accept it when the rating matches too.
+        const base = asset ? byEa.get(asset) : undefined;
+        return base && rating !== null && base.rating === rating ? base.id : null;
+      };
+      const res = parsePriceImport(text, { source, received_at: opts.received_at ?? now(), knownCardIds: new Set(cards.map((c) => c.id)), rules, resolveEaItem });
       const stored = await deps.prices.insert(source.is_demo ? null : owner, res.rows);
       if (res.rows.length) {
         const earliest = res.rows.reduce((m, r) => (r.observed_at < m ? r.observed_at : m), res.rows[0]!.observed_at);

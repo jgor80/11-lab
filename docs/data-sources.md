@@ -9,13 +9,13 @@ Checked 2026-11-02. Each source below is a row in `data_sources`, and the import
 | [Kaggle: EA SPORTS FC 27 Player Ratings (MikeDPad)](https://www.kaggle.com/datasets/mikedpad/ea-sports-fc27-player-ratings) | A 2026-09-14 snapshot of the same EA feed (19,789 items) | Licence "Other"; EA's data, non-commercial | pending_review (fallback only) |
 | [EA FC Community API](https://help.ea.com/en/articles/ea-sports-fc/community-api/) | Official: your club's players, formations, tactics, via EA login | Only FUTBIN, FUT.GG and FUTWIZ are partners; EA is "not accepting requests at this time" | **blocked** until EA opens it |
 | FUTBIN / FUT.GG / FUTWIZ | Everything incl. promos and prices | No public API or data licence | **blocked** |
-| EA FUT Web App / Companion transfer market | Live prices | Needs your EA login; automating it risks a ban on your account | not used |
+| EA FUT Web App transfer market (passive capture) | Lowest Buy Now for searches you run yourself | Your EA login; no automation. Third-party extensions on EA's site carry some account risk | **approved** by Jeff on 2026-11-02: XI Lab Price Capture extension reads only results already loaded, never searches, clicks or bids. See docs/market-lab.md |
 
 ## What no source gives us yet
 
 - **Promo / special cards** (TOTW, Icons, Heroes, Evos): only from manual entry.
 - **Role+ and Role++ familiarity**: only from manual entry. The EA feed doesn't include roles.
-- **Market prices**: no source. `market_prices` stays empty.
+- **Market-wide prices**: no licensed feed. Prices come only from your own Web App searches (passive capture) or imports, so coverage follows what you looked at.
 - **Chemistry rules**: community numbers, stored as the `fc27-community-v0` rule version marked `unverified`.
 
 ## EA ratings feed notes
