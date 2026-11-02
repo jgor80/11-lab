@@ -72,11 +72,11 @@ async function getPage(offset: number): Promise<string> {
 function describeTop(items: unknown[]) {
   console.log("Top of the feed (check this is the edition you expect):");
   for (const raw of items.slice(0, 10)) {
+    // Don't judge the edition by image URLs: EA serves FC 27 images from a folder named /FC25/.
     const i = raw as { rank?: number; overallRating?: number; commonName?: string | null; firstName?: string; lastName?: string;
-      position?: { shortLabel?: string }; gender?: { label?: string }; avatarUrl?: string };
+      position?: { shortLabel?: string }; gender?: { label?: string } };
     const name = i.commonName || `${i.firstName ?? ""} ${i.lastName ?? ""}`.trim();
-    const assetEdition = /\/(FC\d\d)\//.exec(i.avatarUrl ?? "")?.[1] ?? "?";
-    console.log(`  #${i.rank} ${name} ${i.overallRating} ${i.position?.shortLabel} (${i.gender?.label}; image path ${assetEdition})`);
+    console.log(`  #${i.rank} ${name} ${i.overallRating} ${i.position?.shortLabel} (${i.gender?.label})`);
   }
 }
 
