@@ -1,8 +1,9 @@
 // Passive price capture (Jeff's choice, 2026-11-02): the XI Lab browser helper reads ONLY the transfer-market
 // search results the EA Web App has already downloaded because the user searched. It never sends a request,
 // clicks, bids or lists. This module is the pure part: which responses count, and how a page of listings
-// becomes one observation per item. The response shape follows the Web App's public behaviour as of FC 26
-// (auctionInfo[].itemData / buyNowPrice) and is checked defensively; anything unexpected is skipped, not guessed.
+// becomes one observation per item. The response shape (auctionInfo[].itemData / buyNowPrice) was verified on
+// FC 27 traffic on 2026-11-08 (docs/web-app-endpoints.md) and is still checked defensively; anything unexpected is
+// skipped, not guessed.
 
 export interface CaptureRow {
   /** EA's item (resource) id: matches player_cards.ea_item_id for cards from the ratings feed. */

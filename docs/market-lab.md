@@ -225,3 +225,8 @@ npm run market -- overview --platform console
 npm run market -- card --id 1234
 npm run market -- scan --status research_further,favorable_setup
 ```
+
+## FC 27 Web App endpoints
+
+The real search URL, params, headers and response fields, captured from the Web App on 2026-11-08, are in
+[web-app-endpoints.md](web-app-endpoints.md).
