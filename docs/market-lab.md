@@ -1,5 +1,9 @@
 # Market Lab (Stage A)
 
+For anonymous server-side collection from FUT.GG's public bulk price files and a twice-daily systemd timer,
+see [Standalone bulk price collector](market-feed-collector.md). This collector stores a separate local cache;
+it does not change the app's enabled data sources or import data into the hosted website.
+
 Market Lab is XI Lab's market research and decision-support section. It is not a trading bot: it never bids,
 buys, lists or touches an EA account. Stage A is the market-data foundation: price history, benchmark indexes,
 relative strength, momentum, mean reversion, a trade thesis simulator, Card Intelligence and a watchlist.
