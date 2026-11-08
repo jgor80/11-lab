@@ -19,6 +19,13 @@ export interface CaptureRow {
   observed_at: string;
   /** EA's own ids for the item, kept so a capture for a card XI Lab doesn't have yet can be identified later. */
   details?: CaptureDetails;
+  /**
+   * itemData.marketAverage: one EA number per card version, the same on every listing (docs/web-app-endpoints.md).
+   * Looks like a smoothed average sale price; what it measures is UNCONFIRMED. Null when absent or 0.
+   */
+  market_average?: number | null;
+  /** itemData.lastSalePrice of the listings on the page that have sold before (non-zero only, at most 20). */
+  last_sales?: number[];
 }
 
 /** EA ids as the Web App sends them (not names). rare_flag 0/1 = common/rare base; higher = a special version. */
@@ -30,7 +37,9 @@ export interface CaptureDetails {
   position?: string;
 }
 
-export const CAPTURE_CSV_HEADER = "ea_item_id,asset_id,rating,platform,price,observed_at,kind,listings,rare_flag,team_id,league_id,nation_id,position";
+export const CAPTURE_CSV_HEADER = "ea_item_id,asset_id,rating,platform,price,observed_at,kind,listings,rare_flag,team_id,league_id,nation_id,position,market_average,last_sales";
+/** Most past-sale prices kept per item per page. */
+export const MAX_LAST_SALES = 20;
 export const CAPTURE_DETAIL_FIELDS = ["rare_flag", "team_id", "league_id", "nation_id", "position"] as const;
 
 /** Transfer-market SEARCH responses only (not your trade pile, watch list or unassigned items). */
@@ -82,7 +91,7 @@ export function lowestBelievable(bins: number[]): number {
 export function summarizeSearch(json: unknown, opts: { observed_at: string; platform: "console" | "pc" }): CaptureRow[] {
   const list = (json as { auctionInfo?: unknown })?.auctionInfo;
   if (!Array.isArray(list)) return [];
-  const by = new Map<number, { row: CaptureRow; bins: number[] }>();
+  const by = new Map<number, { row: CaptureRow; bins: number[]; avg: number | null; sales: number[] }>();
   for (const a of list as Record<string, unknown>[]) {
     if (!a || typeof a !== "object") continue;
     if (a.tradeState !== undefined && a.tradeState !== "active") continue;
@@ -91,20 +100,28 @@ export function summarizeSearch(json: unknown, opts: { observed_at: string; plat
     const id = int(item.resourceId);
     const bin = int(a.buyNowPrice);
     if (!id || !bin) continue;
+    const avg = int(item.marketAverage);
+    const sale = int(item.lastSalePrice);
     const cur = by.get(id);
-    if (cur) cur.bins.push(bin);
-    else {
+    if (cur) {
+      cur.bins.push(bin);
+      if (!cur.avg && avg) cur.avg = avg;
+      if (sale && cur.sales.length < MAX_LAST_SALES) cur.sales.push(sale);
+    } else {
       const details = detailsOf(item);
-      by.set(id, { bins: [bin], row: { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at, ...(details ? { details } : {}) } });
+      by.set(id, { bins: [bin], avg, sales: sale ? [sale] : [], row: { ea_item_id: id, asset_id: int(item.assetId), rating: int(item.rating), platform: opts.platform, price: bin, listings: 1, observed_at: opts.observed_at, ...(details ? { details } : {}) } });
     }
   }
-  return [...by.values()].map(({ row, bins }) => ({ ...row, price: lowestBelievable(bins), listings: bins.length }));
+  return [...by.values()].map(({ row, bins, avg, sales }) => ({
+    ...row, price: lowestBelievable(bins), listings: bins.length,
+    ...(avg ? { market_average: avg } : {}), ...(sales.length ? { last_sales: sales } : {}),
+  }));
 }
 
 /** CSV the Market Lab importer reads (web Import screen, `npm run market -- import`, Gaffer Bot import route). */
 export function captureRowsToCsv(rows: CaptureRow[]): string {
   return [
     CAPTURE_CSV_HEADER,
-    ...rows.map((r) => [r.ea_item_id, r.asset_id ?? "", r.rating ?? "", r.platform, r.price, r.observed_at, "lowest_bin", r.listings, ...CAPTURE_DETAIL_FIELDS.map((k) => r.details?.[k] ?? "")].join(",")),
+    ...rows.map((r) => [r.ea_item_id, r.asset_id ?? "", r.rating ?? "", r.platform, r.price, r.observed_at, "lowest_bin", r.listings, ...CAPTURE_DETAIL_FIELDS.map((k) => r.details?.[k] ?? ""), r.market_average ?? "", (r.last_sales ?? []).join(";")].join(",")),
   ].join("\n");
 }

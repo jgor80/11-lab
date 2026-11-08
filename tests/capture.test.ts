@@ -61,6 +61,18 @@ describe("summarizeSearch", () => {
     expect(r).toMatchObject({ price: 20_500, listings: 3 });
   });
 
+  it("keeps EA's marketAverage and past sale prices (non-zero) per item", () => {
+    const [r] = summarizeSearch({ auctionInfo: [
+      listing(239085, 5_300, {}, { marketAverage: 4_945, lastSalePrice: 1_200 }), listing(239085, 9_400, {}, { marketAverage: 4_945, lastSalePrice: 0 }),
+      listing(239085, 6_000, {}, { marketAverage: 4_945, lastSalePrice: 16_000 }),
+    ] }, { observed_at: A, platform: "console" });
+    expect(r).toMatchObject({ price: 5_300, market_average: 4_945, last_sales: [1_200, 16_000] });
+    expect(captureRowsToCsv([r!]).split("\n")[1]!.endsWith(",4945,1200;16000")).toBe(true);
+    const [plain] = summarizeSearch({ auctionInfo: [listing(1, 500)] }, { observed_at: A, platform: "pc" });
+    expect(plain!.market_average).toBeUndefined();
+    expect(plain!.last_sales).toBeUndefined();
+  });
+
   it("skips non-players, junk and unexpected shapes instead of guessing", () => {
     expect(summarizeSearch({ auctionInfo: [listing(1, 500, {}, { itemType: "contract" }), null, { buyNowPrice: 400 }, listing(2, 1.5)] }, { observed_at: A, platform: "pc" })).toEqual([]);
     expect(summarizeSearch({}, { observed_at: A, platform: "pc" })).toEqual([]);
@@ -70,12 +82,12 @@ describe("summarizeSearch", () => {
   it("keeps EA's ids for the item so an unmatched capture can be identified later", () => {
     const [r] = summarizeSearch({ auctionInfo: [listing(50_570_001, 90_000, {}, { rating: 91, rareflag: 3, teamid: 10, leagueId: 13, nation: 14, preferredPosition: "ST" })] }, { observed_at: A, platform: "console" });
     expect(r!.details).toEqual({ rare_flag: 3, team_id: 10, league_id: 13, nation_id: 14, position: "ST" });
-    expect(captureRowsToCsv([r!]).split("\n")[1]).toBe(`50570001,570001,91,console,90000,${A},lowest_bin,1,3,10,13,14,ST`);
+    expect(captureRowsToCsv([r!]).split("\n")[1]).toBe(`50570001,570001,91,console,90000,${A},lowest_bin,1,3,10,13,14,ST,,`);
   });
 
   it("writes the CSV the importer reads", () => {
     const csv = captureRowsToCsv(summarizeSearch({ auctionInfo: [listing(239085, 20_500)] }, { observed_at: A, platform: "pc" }));
-    expect(csv.split("\n")).toEqual([CAPTURE_CSV_HEADER, `239085,239085,88,pc,20500,${A},lowest_bin,1,,,,,`]);
+    expect(csv.split("\n")).toEqual([CAPTURE_CSV_HEADER, `239085,239085,88,pc,20500,${A},lowest_bin,1,,,,,,,`]);
   });
 });
 
