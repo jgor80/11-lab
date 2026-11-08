@@ -1,4 +1,4 @@
-import type { CaptureRow } from "../../src/market/capture.js";
+import { MAX_LAST_SALES, type CaptureRow } from "../../src/market/capture.js";
 import type { ClubItem, ClubNames } from "../../src/club/capture.js";
 
 export interface Stored {
@@ -43,7 +43,11 @@ export function mergeRows(have: CaptureRow[], add: CaptureRow[]): CaptureRow[] {
   for (const r of add) {
     const k = key(r);
     const prev = m.get(k);
-    m.set(k, prev ? { ...prev, price: Math.min(prev.price, r.price), listings: Math.max(prev.listings, r.listings) } : r);
+    m.set(k, prev ? {
+      ...prev, price: Math.min(prev.price, r.price), listings: Math.max(prev.listings, r.listings),
+      ...(r.market_average ?? prev.market_average ? { market_average: r.market_average ?? prev.market_average } : {}),
+      ...(prev.last_sales || r.last_sales ? { last_sales: [...(prev.last_sales ?? []), ...(r.last_sales ?? [])].slice(0, MAX_LAST_SALES) } : {}),
+    } : r);
   }
   return [...m.values()].sort((a, b) => a.observed_at.localeCompare(b.observed_at)).slice(-MAX_ROWS);
 }

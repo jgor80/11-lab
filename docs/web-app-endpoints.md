@@ -148,7 +148,7 @@ helper rate limit that counts only searches undercounts what EA sees.
 | `summarizeSearch`: `auctionInfo[].itemData.resourceId`, `buyNowPrice`, `tradeState: "active"`, `rareflag`, `teamid`, `leagueId`, `nation`, `preferredPosition` | ✅ All present with the expected types. Was "UNVERIFIED for FC 27", now verified |
 | `learnTemplate` keys on `maskedDefId` / `definitionId` and drops price filters | ✅ The real name search sends `maskedDefId`. The template keeps `lev`/`zone`, so the template comes from the user's own last search |
 | Price check sends with `fetch(..., credentials: "include")` | ⚠️ The Web App uses XHR. Whether it sets `withCredentials` wasn't checked. If EA's CORS answer doesn't allow credentials, a `credentials: "include"` fetch fails and the run stops with "Network problem" (it fails safe). Match the Web App's mode when this is next tested |
-| Lowest BIN per page | ✅ Still right. Add `marketAverage` (per card) and `lastSalePrice` (per listing, non-zero only) as follow-up columns |
+| Lowest BIN per page | ✅ Still right. `marketAverage` (per card) and `lastSalePrice` (per listing, non-zero only) are now captured as the `market_average` and `last_sales` CSV columns (helper v0.4.2) |
 | Search pacing 10 to 20 s, daily cap | Fine for searches. Results pages left open poll about once a second, so the helper's own searches (which don't open a results screen) add far less load than browsing by hand |
 
 ## Not captured (next time, if wanted)
