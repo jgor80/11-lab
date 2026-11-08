@@ -9,6 +9,13 @@ import type { ClubItem } from "../club/capture.js";
 import type { CaptureRow } from "./capture.js";
 
 export const DAILY_CAP = 100;
+/** A newly unlocked account starts lower and rises by RAMP_PER_DAY each UTC day to DAILY_CAP. */
+export const FIRST_DAY_CAP = 30;
+export const RAMP_PER_DAY = 10;
+/** At most this many searches in any rolling hour. */
+export const HOURLY_CAP = 20;
+/** After EA throttles, refuses or asks for a captcha, no searches for this long. */
+export const COOLDOWN_HOURS = 24;
 /** Searches per sitting before a longer break. */
 export const SESSION_LENGTH = 12;
 /** Skip cards priced more recently than this. */
@@ -67,10 +74,42 @@ export function buildQueue(club: ClubItem[], rows: CaptureRow[], now: Date, limi
     .slice(0, Math.max(0, limit));
 }
 
-/** Searches left today (UTC day). */
-export function remainingToday(day: string | undefined, count: number | undefined, now: Date): number {
-  return day === now.toISOString().slice(0, 10) ? Math.max(0, DAILY_CAP - (count ?? 0)) : DAILY_CAP;
+/** Today's cap: FIRST_DAY_CAP on the first day the price check ran, then RAMP_PER_DAY more each day, up to DAILY_CAP. */
+export function dailyCapFor(firstDay: string | undefined, now: Date): number {
+  if (!firstDay) return FIRST_DAY_CAP;
+  const days = Math.max(0, Math.floor((Date.parse(now.toISOString().slice(0, 10)) - Date.parse(firstDay)) / 86_400_000));
+  return Math.min(DAILY_CAP, FIRST_DAY_CAP + RAMP_PER_DAY * days);
 }
+
+/** Searches left today (UTC day). */
+export function remainingToday(day: string | undefined, count: number | undefined, now: Date, cap = DAILY_CAP): number {
+  return day === now.toISOString().slice(0, 10) ? Math.max(0, cap - (count ?? 0)) : cap;
+}
+
+/** Search times kept for the budget display and the hourly cap (last 24 hours). */
+export function pruneLog(log: string[] | undefined, now: Date): string[] {
+  const since = now.getTime() - 24 * 3600_000;
+  return (log ?? []).filter((t) => Date.parse(t) > since);
+}
+
+/** Searches in the last 1, 3 and 24 hours. */
+export function searchBudget(log: string[] | undefined, now: Date) {
+  const n = (h: number) => (log ?? []).filter((t) => Date.parse(t) > now.getTime() - h * 3600_000).length;
+  return { h1: n(1), h3: n(3), h24: n(24) };
+}
+
+/** How many searches this run may make: the lower of what's left today and in the rolling hour. */
+export function runLimit(s: { day?: string; count?: number; firstDay?: string; log?: string[] }, now: Date): number {
+  return Math.min(remainingToday(s.day, s.count, now, dailyCapFor(s.firstDay, now)), Math.max(0, HOURLY_CAP - searchBudget(s.log, now).h1));
+}
+
+/** True for answers that mean EA is limiting or checking this account: start a cool-down. */
+export function isThrottle(status: number): boolean {
+  return [429, 458, 459, 460, 461, 494, 512, 521].includes(status);
+}
+
+export const cooldownUntil = (now: Date) => new Date(now.getTime() + COOLDOWN_HOURS * 3600_000).toISOString();
+export const inCooldown = (until: string | null | undefined, now: Date) => !!until && Date.parse(until) > now.getTime();
 
 /** Wait before search number `n` (0-based) of this run: 10-20 s, and a 4-8 minute break after every SESSION_LENGTH. */
 export function delayBefore(n: number, rand: () => number = Math.random): number {

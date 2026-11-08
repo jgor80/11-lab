@@ -6,7 +6,7 @@
 // themselves. Only GET to the transfer-market search address (isSafeSearch); never bids, buys or lists. Headers
 // stay in this page's memory and are never stored or sent anywhere else.
 import { isTransferMarketSearch, summarizeSearch } from "../../src/market/capture.js";
-import { delayBefore, isSafeSearch, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
+import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
 
 const TAG = "xilab-capture";
@@ -146,7 +146,7 @@ async function run(items: { ea_item_id: number; asset_id: number | null }[]) {
       n++;
       status({ running: true, searched: 1, note: null });
       const why = stopReason(res.status, json);
-      if (why) return status({ running: false, stopped: why });
+      if (why) return status({ running: false, stopped: why, throttled: isThrottle(res.status) });
     }
     status({ running: false, stopped: stopAsked ? "Stopped." : "Done for now." });
   } catch {
