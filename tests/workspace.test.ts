@@ -10,6 +10,8 @@ import {
   assignCard,
   compareSquads,
   createSquad,
+  FORMATION_NAMES,
+  formationSlots,
   createWorkspaceService,
   diagnoseSlot,
   evaluateSquad,
@@ -69,6 +71,23 @@ describe("squad workspace", () => {
     const lst = (x: Squad) => evaluateSquad(x, R).chemistry.players.find((p) => p.slot === "LST")!.chemistry;
     expect(lst(s)).toBe(2);
     expect(lst(usa)).toBe(3);
+  });
+
+  it("has every FC 27 Ultimate Team formation, each a valid XI in FC 27's 12 positions", () => {
+    const positions = new Set(["GK", "LB", "CB", "RB", "CDM", "CM", "CAM", "LM", "RM", "LW", "RW", "ST"]);
+    expect(FORMATION_NAMES).toHaveLength(28);
+    expect(FORMATION_NAMES).toEqual(expect.arrayContaining(["4-3-3 (2)", "4-2-3-1 (2)", "4-1-2-1-2 (2)", "5-2-1-2", "3-1-4-2"]));
+    for (const name of FORMATION_NAMES) {
+      const slots = formationSlots(name);
+      expect(slots, name).toHaveLength(11);
+      expect(new Set(slots.map((s) => s.slot)).size, name).toBe(11);
+      expect(slots.filter((s) => s.position === "GK"), name).toHaveLength(1);
+      for (const s of slots) expect(positions.has(s.position), `${name} ${s.slot} ${s.position}`).toBe(true);
+      // Outfield lines go back to front: no slot sits in front of a line nearer the opponent's goal.
+      expect(slots.map((s) => s.row), name).toEqual([...slots.map((s) => s.row)].sort((a, b) => a - b));
+    }
+    const s = createSquad({ formation: "4-3-3 (4)" });
+    expect(s.slots.map((x) => x.position)).toEqual(["GK", "LB", "CB", "CB", "RB", "CM", "CM", "CAM", "LW", "ST", "RW"]);
   });
 
   it("keeps cards and locks when the formation changes", () => {
