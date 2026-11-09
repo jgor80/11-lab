@@ -27,7 +27,13 @@ export interface UploadState {
   /** Pack pulls, and the opened_at of the newest one uploaded. */
   pulls?: PackPull[];
   pulls_sent_until?: string;
+  /** Account capture: the newest section time, and the one last uploaded. */
+  last_account?: string;
+  account_sent?: string;
 }
+
+/** The account is uploaded whenever any section of it is newer than the last upload. */
+export const accountDue = (s: UploadState) => !!s.last_account && s.last_account !== s.account_sent;
 
 /** Pulls per upload. */
 export const PULL_BATCH = 500;

@@ -1,6 +1,7 @@
 // Runs in the Web App's own page (MAIN world). It wraps fetch and XMLHttpRequest ONLY to read a copy of
 // responses the Web App already received: transfer-market searches (prices), your club and squad lists, the pack
-// store and what packs you open gave you, and the Web App's own name files. It never changes the Web App's requests.
+// store and what packs you open gave you, your account (coins, FC Points, transfer list, watchlist, unassigned,
+// SBCs, objectives, season progress), and the Web App's own name files. It never changes the Web App's requests.
 // PRICE CHECK (Jeff's choice, 2026-11-02): when the user presses Start in the helper, it also runs slow GET searches
 // for their own club cards, in this tab, using the search format and session headers of a search the user ran
 // themselves. Only GET to the transfer-market search address (isSafeSearch); never bids, buys or lists. Headers
@@ -8,10 +9,11 @@
 import { isTransferMarketSearch, summarizeSearch } from "../../src/market/capture.js";
 import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
+import { accountKind, readAccountResponse } from "../../src/account/capture.js";
 import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreResponse, packIdFromBody, parseStoreStrings, storeShape, summarizePulls, summarizeStore } from "../../src/store/capture.js";
 
 const TAG = "xilab-capture";
-const wanted = (url: string) => isTransferMarketSearch(url) || isClubResponse(url) !== null || isPlayerNames(url) || isLocalisation(url)
+const wanted = (url: string, method = "GET") => accountKind(url, method) !== null || isTransferMarketSearch(url) || isClubResponse(url) !== null || isPlayerNames(url) || isLocalisation(url)
   || isStoreResponse(url) || isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url);
 
 // The pack the user opened last (their own click), so the items that follow can be credited to it.
@@ -23,7 +25,17 @@ function noteRequest(url: string, method: string, body: unknown) {
   else if (isOwnedPackOpen(url)) lastOpen = { pack_id: null, at: Date.now() };
 }
 
-function emit(url: string, json: unknown) {
+function emit(url: string, json: unknown, method = "GET") {
+  // Your account: balance, piles, SBCs, objectives. Read from answers the Web App loaded; it may also be a pack pull.
+  const account = accountKind(url, method);
+  if (account) {
+    try {
+      const patch = readAccountResponse(account, json);
+      if (Object.keys(patch).length > 1) window.postMessage({ [TAG]: true, account: patch }, window.location.origin);
+    } catch {
+      /* never get in the Web App's way */
+    }
+  }
   // Pack store: the packs, prices and odds the Store screen already shows. Never buys or opens anything.
   if (isStoreResponse(url)) {
     const packs = summarizeStore(json);
@@ -95,7 +107,8 @@ window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>)
   const res = await origFetch.apply(this, args);
   try {
     const url = typeof args[0] === "string" ? args[0] : args[0] instanceof URL ? args[0].href : (args[0] as Request).url;
-    if (res.ok && wanted(url)) res.clone().json().then((j) => emit(url, j)).catch(() => {});
+    const method = args[1]?.method ?? (args[0] instanceof Request ? args[0].method : "GET");
+    if (res.ok && wanted(url, method)) res.clone().json().then((j) => emit(url, j, method)).catch(() => {});
   } catch {
     /* never get in the Web App's way */
   }
@@ -124,12 +137,12 @@ XMLHttpRequest.prototype.open = function (this: Xhr, method: string, url: string
   this.__xilabUrl = String(url);
   this.__xilabMethod = method;
   this.__xilabHeaders = {};
-  if (wanted(this.__xilabUrl))
+  if (wanted(this.__xilabUrl, method))
     this.addEventListener("load", () => {
       try {
         if (this.status !== 200) return;
         const body = this.responseType === "json" ? this.response : this.responseType === "" || this.responseType === "text" ? JSON.parse(this.responseText) : null;
-        if (body) emit(this.__xilabUrl!, body);
+        if (body) emit(this.__xilabUrl!, body, this.__xilabMethod ?? "GET");
       } catch {
         /* not JSON: ignore */
       }

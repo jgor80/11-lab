@@ -1,9 +1,10 @@
-// Service worker: uploads captured prices, club and pack store to the user's XI Lab account on gafferbot.app once a helper key
+// Service worker: uploads captured prices, club, pack store and account to the user's XI Lab account on gafferbot.app once a helper key
 // is saved (Market Lab > Import prices > Connect helper). Every few minutes, and about a minute after new captures.
 // It only forwards what the helper already stored; it never contacts EA.
 import { captureRowsToCsv } from "../../src/market/capture.js";
 import { buildClubExport } from "../../src/club/capture.js";
-import { buildStoreExport, GAFFERBOT_API, packPlan, UPLOAD_EVERY_MINUTES, uploadOutcome, uploadPlan } from "../../src/market/upload.js";
+import { buildAccountExport } from "../../src/account/capture.js";
+import { accountDue, buildStoreExport, GAFFERBOT_API, packPlan, UPLOAD_EVERY_MINUTES, uploadOutcome, uploadPlan } from "../../src/market/upload.js";
 import { emptyNames, type Stored } from "./store.js";
 
 declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -25,7 +26,7 @@ async function upload() {
   if (running) return;
   running = true;
   try {
-    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform"]);
+    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent"]);
     if (!s.helper_key) return;
     const plan = uploadPlan(s);
     if (plan.club && s.club?.length) {
@@ -43,6 +44,12 @@ async function upload() {
         ...(packs.pulls.length ? { pulls_sent_until: packs.pulls.at(-1)!.opened_at } : {}),
         last_upload: new Date().toISOString(), upload_note: "Pack store uploaded.",
       });
+    }
+    // Your account (coins, points, piles, SBCs, objectives) whenever the Web App showed something newer.
+    if (accountDue(s) && s.account) {
+      const r = await post(s.helper_key, "/helper/account", { ...buildAccountExport(s.account), platform: s.platform === "pc" ? "pc" : "console" });
+      if (!r.ok) return void (await set({ upload_note: r.note, ...(r.key_dead ? { helper_key: null } : {}) }));
+      await set({ account_sent: s.last_account, last_upload: new Date().toISOString(), upload_note: "Account uploaded." });
     }
     if (plan.rows.length) {
       const r = await post(s.helper_key, "/helper/prices", { text: captureRowsToCsv(plan.rows) });

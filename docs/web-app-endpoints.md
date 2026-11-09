@@ -174,3 +174,23 @@ real capture confirms or corrects this.
   two minutes of an open it saw.
 
 `src/store/capture.ts` reads all of this; anything that doesn't fit is skipped. The helper never buys, opens or claims.
+
+## Your account (helper v0.6.0, bodies not captured yet)
+
+The **addresses** are verified (they load at sign-in, see the sign-in sequence above); the **bodies** are hypotheses
+from earlier seasons. Every upload keeps the field names it saw (`shape`, never values) and Gaffer Bot's My Account page
+shows them, so the first real capture confirms or corrects this. Personal ids (persona id, Nucleus id, seller names)
+are never kept.
+
+| Answer | When it loads | What the helper keeps |
+| --- | --- | --- |
+| `GET …/usermassinfo` | Sign-in | `userInfo`: club name and abbreviation, persona name, established, won / loss / draw, trophies, divisions, unopened packs, unassigned count, `credits` + `currencies[] { name, funds, finalFunds }`; pile capacities from `pileSizeClientData.entries[] { key, value }` (2 = transfer list, 4 = watchlist in earlier seasons) |
+| `GET …/user/credits` | After the balance changes | `credits` and `currencies[]`: coins, FC Points, draft tokens and any other currency by EA's own name |
+| `GET …/tradepile` | Sign-in, Transfer List | `auctionInfo[]`: `tradeId`, `tradeState` (active / closed = sold / expired / null = unlisted), `buyNowPrice`, `startingBid`, `currentBid`, `expires` (seconds left), item ids, rating, untradeable; `credits` |
+| `GET …/watchlist` | Sign-in, Transfer Targets | Same, plus `bidState` (highest / outbid) for winning, outbid, won and lost |
+| `GET …/purchased/items` | Sign-in, after packs | `itemData[]` and `duplicateItemIdList[] { itemId }` |
+| `GET …/sbs/sets` | Opening SBCs | `categories[] { name, sets[] { setId, name, challengesCount, challengesCompletedCount, timesCompleted, repeatabilityMode, repeats, endTime, hidden, awards[] { type, value, count, untradeable } } }` |
+| `GET …/scmp/campaign…` | Opening Objectives | Layout unknown: any object with a name and a progress / target pair (`progress`/`target`, `currentValue`/`targetValue`, …) counts as one objective, grouped under its nearest named parent, with `xp` and end time when present |
+| `GET …/scmp/data/lite`, `fcas…/fc/user/season/lite` | Sign-in | Numeric fields named like level / XP / tier / points / rank from the top two levels |
+
+`src/account/capture.ts` reads all of this. The helper never lists, bids, buys, claims or submits anything.

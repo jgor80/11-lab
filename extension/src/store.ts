@@ -1,5 +1,6 @@
 import { MAX_LAST_SALES, type CaptureRow } from "../../src/market/capture.js";
 import type { ClubItem, ClubNames } from "../../src/club/capture.js";
+import type { AccountState } from "../../src/account/capture.js";
 import type { PackOffer, PackPull, StoreCapture } from "../../src/store/capture.js";
 
 export interface Stored {
@@ -37,6 +38,10 @@ export interface Stored {
   pulls?: PackPull[];
   pulls_sent_until?: string;
   last_pull?: string;
+  /** Your account as the Web App last showed it (balance, piles, SBCs, objectives), newest section of each. */
+  account?: AccountState;
+  last_account?: string;
+  account_sent?: string;
   /** Auto-upload to gafferbot.app: the helper key, and what was last sent. */
   helper_key?: string | null;
   sent_until?: string;
