@@ -156,3 +156,21 @@ helper rate limit that counts only searches undercounts what EA sees.
 Rarity, nation, league, club and chem-style params; `definitionId` searches; managers, club items and consumables
 tabs; `minb`/`micr`/`macr`; error statuses (only 200s were seen, so the helper's stop codes 458/459/460/461/494/512/521
 are still from earlier seasons, which makes them hypotheses); response bodies of the sign-in calls.
+
+## Pack store (helper v0.5.0, not captured yet)
+
+**Hypothesis** throughout: carried over from FC 26 community clients, not seen on FC 27 yet. The helper keeps the
+field names it sees (never values) in each upload's `shape`, and Gaffer Bot's Pack Advisor shows them, so the first
+real capture confirms or corrects this.
+
+- `GET …/ut/game/fc27/store/purchaseGroup/all?ppInfo=true&categoryInfo=true`: loaded when the Store opens. Answer
+  `{ purchase: [...] }` (older seasons: `purchaseGroup[].packs`). Each pack: `id`, `type`, `nameLoc` / `descriptionLoc`
+  (localisation keys), `coins`, `points`, `untradeable`, `packContentInfo { itemQuantity, goldQuantity, silverQuantity,
+  bronzeQuantity, rareQuantity }`, `start` / `end` / `secondsUntilEnd`, `purchaseLimit` / `purchaseCount`, `unopened`, and
+  `packOdds[] { oddsFormatted, packOddsCategory { description, qualityId, rarityAssetId, packOddsRules[] { ruleType, ruleValue } } }`.
+- `POST …/store/purchaseGroup/cardpack` with `{ "packId": … }`: the user opening a store pack. The helper reads the
+  pack id from the body and the items in the answer. `POST …/purchased/items/<id>` opens an owned pack.
+- `GET …/purchased/items`: the unassigned pile. Also loaded at sign-in, so the helper only counts it as pulls within
+  two minutes of an open it saw.
+
+`src/store/capture.ts` reads all of this; anything that doesn't fit is skipped. The helper never buys, opens or claims.

@@ -1,6 +1,6 @@
 // Runs in the Web App's own page (MAIN world). It wraps fetch and XMLHttpRequest ONLY to read a copy of
-// responses the Web App already received: transfer-market searches (prices), your club and squad lists, and
-// the Web App's own name files. It never changes the Web App's requests.
+// responses the Web App already received: transfer-market searches (prices), your club and squad lists, the pack
+// store and what packs you open gave you, and the Web App's own name files. It never changes the Web App's requests.
 // PRICE CHECK (Jeff's choice, 2026-11-02): when the user presses Start in the helper, it also runs slow GET searches
 // for their own club cards, in this tab, using the search format and session headers of a search the user ran
 // themselves. Only GET to the transfer-market search address (isSafeSearch); never bids, buys or lists. Headers
@@ -8,10 +8,35 @@
 import { isTransferMarketSearch, summarizeSearch } from "../../src/market/capture.js";
 import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
+import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreResponse, packIdFromBody, parseStoreStrings, storeShape, summarizePulls, summarizeStore } from "../../src/store/capture.js";
 
 const TAG = "xilab-capture";
-const wanted = (url: string) => isTransferMarketSearch(url) || isClubResponse(url) !== null || isPlayerNames(url) || isLocalisation(url);
+const wanted = (url: string) => isTransferMarketSearch(url) || isClubResponse(url) !== null || isPlayerNames(url) || isLocalisation(url)
+  || isStoreResponse(url) || isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url);
+
+// The pack the user opened last (their own click), so the items that follow can be credited to it.
+let lastOpen: { pack_id: number | null; at: number } | null = null;
+const OPEN_WINDOW_MS = 120_000;
+function noteRequest(url: string, method: string, body: unknown) {
+  if (method.toUpperCase() !== "POST") return;
+  if (isPackOpen(url)) lastOpen = { pack_id: packIdFromBody(body), at: Date.now() };
+  else if (isOwnedPackOpen(url)) lastOpen = { pack_id: null, at: Date.now() };
+}
+
 function emit(url: string, json: unknown) {
+  // Pack store: the packs, prices and odds the Store screen already shows. Never buys or opens anything.
+  if (isStoreResponse(url)) {
+    const packs = summarizeStore(json);
+    if (packs.length) window.postMessage({ [TAG]: true, store: { packs, shape: storeShape(json) } }, window.location.origin);
+    return;
+  }
+  // What a pack the user opened gave them: the open answer itself, or the unassigned pile right after an open.
+  if (isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url)) {
+    if (!lastOpen || Date.now() - lastOpen.at > OPEN_WINDOW_MS) return; // sign-in loads the pile too: not a pull
+    const pulls = summarizePulls(json, lastOpen.pack_id, new Date().toISOString());
+    if (pulls.length) window.postMessage({ [TAG]: true, pulls }, window.location.origin);
+    return;
+  }
   if (isTransferMarketSearch(url)) {
     // Platform is filled in by the relay from the user's setting.
     const rows = summarizeSearch(json, { observed_at: new Date().toISOString(), platform: "console" });
@@ -30,6 +55,8 @@ function emit(url: string, json: unknown) {
     return;
   }
   if (isLocalisation(url)) {
+    const storeNames = parseStoreStrings(json);
+    if (Object.keys(storeNames).length) window.postMessage({ [TAG]: true, storeNames }, window.location.origin);
     const names = parseLocalisedNames(json);
     if (Object.keys(names.teams).length + Object.keys(names.leagues).length + Object.keys(names.nations).length)
       window.postMessage({ [TAG]: true, names }, window.location.origin);
@@ -61,6 +88,7 @@ window.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>)
     const url = typeof req === "string" ? req : req instanceof URL ? req.href : (req as Request).url;
     const method = args[1]?.method ?? (req instanceof Request ? req.method : "GET");
     if (isTransferMarketSearch(url)) learn(url, method, headersOf(args[1]?.headers ?? (req instanceof Request ? req.headers : undefined)));
+    noteRequest(url, method, args[1]?.body);
   } catch {
     /* never get in the Web App's way */
   }
@@ -84,6 +112,7 @@ const send = XMLHttpRequest.prototype.send;
 XMLHttpRequest.prototype.send = function (this: Xhr, ...a: unknown[]) {
   try {
     if (this.__xilabUrl && isTransferMarketSearch(this.__xilabUrl)) learn(this.__xilabUrl, this.__xilabMethod ?? "GET", this.__xilabHeaders ?? {});
+    if (this.__xilabUrl) noteRequest(this.__xilabUrl, this.__xilabMethod ?? "GET", a[0]);
   } catch {
     /* never get in the Web App's way */
   }
