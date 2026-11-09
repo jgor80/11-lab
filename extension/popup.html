@@ -22,6 +22,12 @@
   <div class="row"><button id="download">Download CSV</button><button id="copy">Copy CSV</button><button id="clear">Clear</button></div>
   <p class="muted">Search the transfer market in the Web App as usual. This helper copies the lowest Buy Now price per player from result pages the Web App already loaded. It never clicks, bids or lists. Nothing leaves your browser unless you export it or connect Gaffer Bot above. It searches only when you start Price check below.</p>
   <p class="muted">Without Gaffer Bot connected: import the CSV in Market Lab (Import prices), or on the server with <code>npm run market -- import --file captures.csv</code>.</p>
+  <h1 style="margin-top:14px">MY ACCOUNT</h1>
+  <div class="row"><span class="big" id="acc-coins">–</span><span class="muted">coins</span><span class="big" id="acc-points" style="margin-left:8px">–</span><span class="muted">FC Points</span></div>
+  <div class="muted" id="acc-piles"></div>
+  <div class="muted" id="acc-last">Sign in to the Web App to capture your balance and piles.</div>
+  <div class="row"><button id="acc-clear">Clear account</button></div>
+  <p class="muted">Copied from what the Web App loads by itself when you sign in (coins, FC Points, transfer list, watchlist, unassigned) and when you open SBCs or Objectives. It never lists, bids, claims or submits anything. With Gaffer Bot connected, it shows on gafferbot.app/fut/account. Account reading is new and not yet checked against FC 27.</p>
   <h1 style="margin-top:14px">MY CLUB</h1>
   <div class="row"><span class="big" id="club-count">0</span><span class="muted">club items stored</span></div>
   <div class="muted" id="club-last">Open your Club in the Web App to capture it.</div>

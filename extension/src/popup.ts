@@ -9,7 +9,7 @@ declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function refresh() {
-  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store"], (s: Stored) => {
+  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store", "account", "last_account"], (s: Stored) => {
     const today = new Date().toISOString().slice(0, 10);
     $("gb-status").textContent = s.helper_key
       ? `Connected (key ending ${s.helper_key.slice(-4)}). ${s.last_upload ? `Last upload ${new Date(s.last_upload).toLocaleString()}.` : "Nothing uploaded yet."} ${s.upload_note ?? ""}`.trim()
@@ -28,6 +28,19 @@ function refresh() {
     $("pack-count").textContent = String(s.packs?.length ?? 0);
     $("pull-count").textContent = String(s.pulls?.length ?? 0);
     $("pack-last").textContent = s.last_store ? `Last store capture ${new Date(s.last_store).toLocaleString()}` : "Open the Store in the Web App to capture its packs and odds.";
+    const a = s.account;
+    const n = (v: number | null | undefined) => (v == null ? "–" : v.toLocaleString());
+    $("acc-coins").textContent = n(a?.balance?.data.coins);
+    $("acc-points").textContent = n(a?.balance?.data.points);
+    const listed = a?.tradepile?.data.filter((t) => t.state === "listed").length, sold = a?.tradepile?.data.filter((t) => t.state === "sold").length;
+    $("acc-piles").textContent = a ? [
+      a.tradepile ? `Transfer list ${a.tradepile.data.length} (${listed} listed, ${sold} sold)` : null,
+      a.watchlist ? `Watchlist ${a.watchlist.data.length}` : null,
+      a.unassigned ? `Unassigned ${a.unassigned.data.length}` : null,
+      a.sbcs ? `${a.sbcs.data.length} SBCs` : null,
+      a.objectives ? `${a.objectives.data.length} objectives` : null,
+    ].filter(Boolean).join(" · ") : "";
+    $("acc-last").textContent = s.last_account ? `Last account capture ${new Date(s.last_account).toLocaleString()}` : "Sign in to the Web App to capture your balance and piles.";
     $("club-count").textContent = String(s.club?.length ?? 0);
     $("club-last").textContent = s.last_club ? `Last club capture ${new Date(s.last_club).toLocaleString()}` : "Open your Club in the Web App to capture it.";
     $("last").textContent = s.last_capture ? `Last capture ${new Date(s.last_capture).toLocaleString()}` : "No captures yet.";
@@ -71,6 +84,9 @@ $("club-download").addEventListener("click", () =>
     a.click();
   }),
 );
+$("acc-clear").addEventListener("click", () => {
+  if (confirm("Delete the stored account capture? The helper copies it again next time the Web App loads it.")) chrome.storage.local.set({ account: {}, last_account: "" }, refresh);
+});
 $("club-clear").addEventListener("click", () => {
   if (confirm("Delete the stored club capture? Export first if you need it.")) chrome.storage.local.set({ club: [] }, refresh);
 });

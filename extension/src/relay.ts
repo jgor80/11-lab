@@ -2,6 +2,7 @@
 // storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
 import { mergePacks, mergePulls } from "../../src/store/capture.js";
+import { accountStamp, mergeAccount } from "../../src/account/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
 import { mergeNames, mergeRows, type Stored } from "./store.js";
 
@@ -32,7 +33,7 @@ window.addEventListener("message", (e: MessageEvent) => {
     });
     return;
   }
-  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names"], (s: Stored) => {
+  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names", "account"], (s: Stored) => {
     if (s.paused) return;
     const now = new Date().toISOString();
     if (Array.isArray(d.rows)) {
@@ -52,7 +53,11 @@ window.addEventListener("message", (e: MessageEvent) => {
       chrome.storage.local.set({ packs: mergePacks(s.packs ?? [], named, now), store_shape: d.store.shape ?? null, last_store: now });
     }
     if (Array.isArray(d.pulls)) chrome.storage.local.set({ pulls: mergePulls(s.pulls ?? [], d.pulls), last_pull: now });
-    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls)) {
+    if (d.account && typeof d.account === "object") {
+      const account = mergeAccount(s.account, d.account);
+      chrome.storage.local.set({ account, last_account: accountStamp(account) ?? now });
+    }
+    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls) || d.account) {
       try { chrome.runtime.sendMessage({ upload: "soon" }, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ }
     }
   });
