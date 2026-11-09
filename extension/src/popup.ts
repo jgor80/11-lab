@@ -9,7 +9,7 @@ declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function refresh() {
-  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until"], (s: Stored) => {
+  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store"], (s: Stored) => {
     const today = new Date().toISOString().slice(0, 10);
     $("gb-status").textContent = s.helper_key
       ? `Connected (key ending ${s.helper_key.slice(-4)}). ${s.last_upload ? `Last upload ${new Date(s.last_upload).toLocaleString()}.` : "Nothing uploaded yet."} ${s.upload_note ?? ""}`.trim()
@@ -25,6 +25,9 @@ function refresh() {
     $("pc-status").textContent = s.pc_running ? `Running… ${s.pc_note ?? ""}`.trim() : s.pc_stopped ?? (s.pc_learned ? "Ready. Press Start." : "Run one search yourself first, then press Start.");
     $<HTMLButtonElement>("pc-start").disabled = !!s.pc_running;
     $("count").textContent = String(s.rows?.length ?? 0);
+    $("pack-count").textContent = String(s.packs?.length ?? 0);
+    $("pull-count").textContent = String(s.pulls?.length ?? 0);
+    $("pack-last").textContent = s.last_store ? `Last store capture ${new Date(s.last_store).toLocaleString()}` : "Open the Store in the Web App to capture its packs and odds.";
     $("club-count").textContent = String(s.club?.length ?? 0);
     $("club-last").textContent = s.last_club ? `Last club capture ${new Date(s.last_club).toLocaleString()}` : "Open your Club in the Web App to capture it.";
     $("last").textContent = s.last_capture ? `Last capture ${new Date(s.last_capture).toLocaleString()}` : "No captures yet.";

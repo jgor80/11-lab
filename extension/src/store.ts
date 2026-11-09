@@ -1,5 +1,6 @@
 import { MAX_LAST_SALES, type CaptureRow } from "../../src/market/capture.js";
 import type { ClubItem, ClubNames } from "../../src/club/capture.js";
+import type { PackOffer, PackPull, StoreCapture } from "../../src/store/capture.js";
 
 export interface Stored {
   rows?: CaptureRow[];
@@ -26,6 +27,16 @@ export interface Stored {
   pc_log?: string[];
   /** No searches until then (set after EA throttles or asks for a captcha). */
   pc_cooldown_until?: string | null;
+  /** Pack store: the packs last seen in the Store (newest copy each), the Web App's store strings, field names seen. */
+  packs?: (PackOffer & { seen_at: string })[];
+  store_names?: Record<string, string>;
+  store_shape?: StoreCapture["shape"];
+  last_store?: string;
+  store_sent?: string;
+  /** Items from packs the user opened, and the opened_at of the newest one uploaded. */
+  pulls?: PackPull[];
+  pulls_sent_until?: string;
+  last_pull?: string;
   /** Auto-upload to gafferbot.app: the helper key, and what was last sent. */
   helper_key?: string | null;
   sent_until?: string;

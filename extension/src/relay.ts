@@ -1,6 +1,7 @@
 // Extension side (isolated world): receives summaries from hook.ts and keeps them in the extension's own
 // storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
+import { mergePacks, mergePulls } from "../../src/store/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
 import { mergeNames, mergeRows, type Stored } from "./store.js";
 
@@ -31,7 +32,7 @@ window.addEventListener("message", (e: MessageEvent) => {
     });
     return;
   }
-  chrome.storage.local.get(["rows", "platform", "paused", "club", "names"], (s: Stored) => {
+  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names"], (s: Stored) => {
     if (s.paused) return;
     const now = new Date().toISOString();
     if (Array.isArray(d.rows)) {
@@ -40,7 +41,18 @@ window.addEventListener("message", (e: MessageEvent) => {
     }
     if (Array.isArray(d.club)) chrome.storage.local.set({ club: mergeClubItems(s.club ?? [], d.club), last_club: now });
     if (d.names && typeof d.names === "object") chrome.storage.local.set({ names: mergeNames(s.names, d.names) });
-    if (Array.isArray(d.rows) || Array.isArray(d.club)) {
+    if (d.storeNames && typeof d.storeNames === "object") {
+      const store_names = { ...(s.store_names ?? {}), ...d.storeNames };
+      // Names can arrive after the store list: fill them in on the packs already stored.
+      const packs = (s.packs ?? []).map((p) => (!p.name && p.name_key && store_names[p.name_key] ? { ...p, name: store_names[p.name_key]! } : p));
+      chrome.storage.local.set({ store_names, packs });
+    }
+    if (d.store && Array.isArray(d.store.packs)) {
+      const named = d.store.packs.map((p: { name: string | null; name_key: string | null }) => (!p.name && p.name_key && s.store_names?.[p.name_key] ? { ...p, name: s.store_names[p.name_key] } : p));
+      chrome.storage.local.set({ packs: mergePacks(s.packs ?? [], named, now), store_shape: d.store.shape ?? null, last_store: now });
+    }
+    if (Array.isArray(d.pulls)) chrome.storage.local.set({ pulls: mergePulls(s.pulls ?? [], d.pulls), last_pull: now });
+    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls)) {
       try { chrome.runtime.sendMessage({ upload: "soon" }, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ }
     }
   });

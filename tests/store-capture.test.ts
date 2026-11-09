@@ -1,0 +1,104 @@
+import { describe, expect, it } from "vitest";
+import {
+  isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreResponse, mergePacks, mergePulls, packIdFromBody, parseOdds, parseStoreStrings,
+  storeShape, summarizePulls, summarizeStore,
+} from "../src/store/capture.js";
+import { buildStoreExport, packPlan, PULL_BATCH } from "../src/market/upload.js";
+
+const HOST = "https://utas.mob.v1.prd.futc-ext.gcp.ea.com:443/ut/game/fc27";
+const NOW = Date.UTC(2026, 10, 9, 18, 0);
+
+// The FC 26 shape community clients read (purchase[] with packContentInfo and packOdds). Values made up.
+const store = {
+  id: "all", timestamp: 1, packOddsAvailabilityState: "AVAILABLE",
+  purchase: [
+    {
+      id: 101, state: "available", type: "pack", nameLoc: "FUT_STORE_PACK_101_NAME", descriptionLoc: "FUT_STORE_PACK_101_DESC",
+      coins: 7500, points: 100, untradeable: false, purchaseLimit: 0, purchaseCount: 0, secondsUntilEnd: 3600, packType: "GOLD",
+      packContentInfo: { itemQuantity: 12, goldQuantity: 12, silverQuantity: 0, bronzeQuantity: 0, rareQuantity: 3, contentType: "players" },
+      packOdds: [
+        { packId: 101, tierId: 1, categoryId: 5, oddsFormatted: "12%", packOddsCategory: { categoryId: 5, tierId: 1, description: "Player 84+ OVR", qualityId: 3, packOddsRules: [{ ruleType: 1, ruleValue: 84 }] } },
+        { packId: 101, tierId: 1, categoryId: 6, oddsFormatted: "100%", packOddsCategory: { categoryId: 6, tierId: 1, description: "Rare Gold Player 75+", packOddsRules: [] } },
+        { packId: 101, tierId: 1, categoryId: 7, oddsFormatted: "<1%", packOddsCategory: { categoryId: 7, description: "Special Item (TOTW)", packOddsRules: [] } },
+      ],
+    },
+    { id: 102, type: "pack", nameLoc: "FUT_STORE_PACK_102_NAME", points: 300, untradeable: true, packContentInfo: { itemQuantity: 5 }, packOdds: [], end: 1794268800 },
+    { id: 900, type: "bundle", nameLoc: "FC_POINTS_1050", points: 0 },
+  ],
+};
+
+describe("pack store capture", () => {
+  it("knows the store, pack-open and pile addresses", () => {
+    expect(isStoreResponse(`${HOST}/store/purchaseGroup/all?ppInfo=true&categoryInfo=true`)).toBe(true);
+    expect(isStoreResponse(`${HOST}/transfermarket?num=21`)).toBe(false);
+    expect(isPackOpen(`${HOST}/store/purchaseGroup/cardpack`)).toBe(true);
+    expect(isOwnedPackOpen(`${HOST}/purchased/items/12345`)).toBe(true);
+    expect(isPurchasedItems(`${HOST}/purchased/items`)).toBe(true);
+  });
+
+  it("reads EA's odds text", () => {
+    expect(parseOdds("12%")).toBeCloseTo(0.12);
+    expect(parseOdds("<1%")).toBeCloseTo(0.005);
+    expect(parseOdds("100 %")).toBe(1);
+    expect(parseOdds("1 in 20")).toBeCloseTo(0.05);
+    expect(parseOdds("0.25")).toBeCloseTo(0.25);
+    expect(parseOdds("rare")).toBeNull();
+  });
+
+  it("summarizes packs with prices, contents and odds, and skips non-packs", () => {
+    const packs = summarizeStore(store, { FUT_STORE_PACK_101_NAME: "Rare Gold Pack" }, NOW);
+    expect(packs.map((p) => p.pack_id)).toEqual([101, 102]);
+    const p = packs[0]!;
+    expect(p).toMatchObject({ name: "Rare Gold Pack", coins: 7500, points: 100, untradeable: false, item_count: 12, rare: 3, gold: 12 });
+    expect(p.end_at).toBe(new Date(NOW + 3600_000).toISOString());
+    expect(p.odds[0]).toMatchObject({ label: "Player 84+ OVR", probability: 0.12, min_rating: 84, max_rating: null, special: false });
+    expect(p.odds[1]).toMatchObject({ min_rating: 75, probability: 1 });
+    expect(p.odds[2]).toMatchObject({ special: true, probability: 0.005 });
+    expect(packs[1]).toMatchObject({ name: null, name_key: "FUT_STORE_PACK_102_NAME", coins: null, points: 300, untradeable: true, end_at: new Date(1794268800_000).toISOString() });
+  });
+
+  it("reads the older purchaseGroup shape too", () => {
+    const old = { purchaseGroup: [{ packs: [{ id: 5, coins: 5000, packContentInfo: { itemQuantity: 12 } }] }] };
+    expect(summarizeStore(old).map((p) => p.coins)).toEqual([5000]);
+  });
+
+  it("keeps field names only for the shape check", () => {
+    const shape = storeShape(store);
+    expect(shape.pack_keys).toContain("packOdds");
+    expect(shape.odds_keys).toContain("oddsFormatted");
+    expect(shape.category_keys).toContain("packOddsRules");
+    expect(JSON.stringify(shape)).not.toContain("7500");
+  });
+
+  it("keeps only store-looking strings", () => {
+    expect(parseStoreStrings({ FUT_STORE_PACK_101_NAME: "Rare Gold Pack", "global.teamFull.2027.1": "Arsenal" })).toEqual({ FUT_STORE_PACK_101_NAME: "Rare Gold Pack" });
+  });
+
+  it("credits pulls to the opened pack and merges them once per item", () => {
+    expect(packIdFromBody('{"packId":101,"currency":"COINS"}')).toBe(101);
+    expect(packIdFromBody(null)).toBeNull();
+    const pulls = summarizePulls({ itemList: [{ id: 1, resourceId: 50_000, rating: 86, rareflag: 1, untradeable: false, itemType: "player" }, { id: 2 }] }, 101, "2026-11-09T18:00:00.000Z");
+    expect(pulls).toEqual([{ item_id: 1, ea_item_id: 50_000, item_type: "player", rating: 86, rare_flag: 1, untradeable: false, pack_id: 101, opened_at: "2026-11-09T18:00:00.000Z" }]);
+    const again = summarizePulls({ itemData: [{ id: 1, resourceId: 50_000 }] }, null, "2026-11-09T18:01:00.000Z");
+    expect(mergePulls(pulls, again)).toHaveLength(1);
+    expect(mergePulls(pulls, again)[0]!.pack_id).toBe(101);
+  });
+
+  it("keeps the newest copy of each pack and drops stale ones", () => {
+    const [a] = summarizeStore(store, {}, NOW);
+    const old = { ...a!, pack_id: 77, seen_at: "2026-10-01T00:00:00.000Z" };
+    const merged = mergePacks([old], [{ ...a!, coins: 8000 }], "2026-11-09T18:00:00.000Z");
+    expect(merged.map((p) => [p.pack_id, p.coins])).toEqual([[101, 8000]]);
+  });
+
+  it("plans pack uploads: the store when it changed, pulls not sent yet", () => {
+    const pull = (m: number) => ({ item_id: m, ea_item_id: 9, item_type: null, rating: 80, rare_flag: 1, untradeable: false, pack_id: null, opened_at: new Date(NOW + m * 60_000).toISOString() });
+    expect(packPlan({})).toEqual({ store: false, pulls: [] });
+    expect(packPlan({ last_store: "a", store_sent: "a", pulls: [pull(1), pull(2)], pulls_sent_until: pull(1).opened_at })).toEqual({ store: false, pulls: [pull(2)] });
+    expect(packPlan({ last_store: "b", store_sent: "a" }).store).toBe(true);
+    expect(packPlan({ pulls: Array.from({ length: PULL_BATCH + 5 }, (_, i) => pull(i)) }).pulls).toHaveLength(PULL_BATCH);
+    const file = buildStoreExport([{ ...summarizeStore(store, {}, NOW)[0]!, seen_at: "x" }], [], null, "console", "t");
+    expect(file).toMatchObject({ format: "xilab-store-capture", platform: "console", captured_at: "t" });
+    expect("seen_at" in file.packs[0]!).toBe(false);
+  });
+});
