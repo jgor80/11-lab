@@ -13,6 +13,9 @@
 // names it saw (`shape`, names only, never values) so the first real capture can confirm or correct this.
 // Personal ids (persona id, Nucleus id, seller names) are never kept.
 
+import { evolutionShape, isEvolutions, readEvolutions, type EvolutionRaw } from "./evolutions.js";
+export type { EvolutionRaw } from "./evolutions.js";
+
 export interface Currency { name: string; funds: number }
 
 export interface Balance {
@@ -134,6 +137,8 @@ export interface AccountState {
   sbcs?: Section<SbcSet[]>;
   /** Challenges (with requirements) of the SBC sets the user opened, newest first. */
   sbc_challenges?: Section<SbcChallenge[]>;
+  /** Evolutions the Web App showed (Evolutions screen), newest copy of each. */
+  evolutions?: Section<EvolutionRaw[]>;
   objectives?: Section<Objective[]>;
   /** Season progress numbers (level, XP and the like) by EA's own key. */
   season?: Section<Record<string, number>>;
@@ -159,7 +164,7 @@ const path = (url: string) => {
 };
 const ut = (rest: string) => new RegExp(`/ut/game/fc\\d+/${rest}$`, "i");
 
-export type AccountKind = "massinfo" | "credits" | "tradepile" | "watchlist" | "unassigned" | "sbcs" | "sbc_challenges" | "objectives" | "season";
+export type AccountKind = "massinfo" | "credits" | "tradepile" | "watchlist" | "unassigned" | "sbcs" | "sbc_challenges" | "evolutions" | "objectives" | "season";
 
 /** The account response this URL is, or null. Only GETs the Web App makes by itself or on the user's own clicks. */
 export function accountKind(url: string, method = "GET"): AccountKind | null {
@@ -172,6 +177,7 @@ export function accountKind(url: string, method = "GET"): AccountKind | null {
   if (ut("purchased/items").test(p)) return "unassigned";
   if (ut("sbs/sets").test(p)) return "sbcs";
   if (ut("sbs/setId/\\d+/challenges").test(p)) return "sbc_challenges";
+  if (isEvolutions(url, method)) return "evolutions";
   if (/\/ut\/game\/fc\d+\/scmp\/campaign/i.test(p)) return "objectives";
   if (ut("scmp/data/lite").test(p) || /\/fc\/user\/season(\/lite)?$/i.test(p)) return "season";
   return null;
@@ -505,6 +511,12 @@ export function readAccountResponse(kind: AccountKind, json: unknown, now = Date
       }
       break;
     }
+    case "evolutions": {
+      const list = readEvolutions(json, now);
+      if (list?.length) patch.evolutions = { seen_at, data: list };
+      Object.assign(patch.shape!, evolutionShape(json));
+      break;
+    }
     case "objectives": {
       const list = readObjectives(json, now);
       // Several campaign answers load one after another (one per tab): an empty one doesn't wipe the others.
@@ -530,6 +542,13 @@ export function mergeAccount(have: AccountState | undefined, add: AccountState):
   out.watchlist = newer(out.watchlist, add.watchlist);
   out.unassigned = newer(out.unassigned, add.unassigned);
   out.sbcs = newer(out.sbcs, add.sbcs);
+  if (add.evolutions) {
+    // The hub and each evolution's own page add up; an evolution seen again replaces its copy; ended ones drop off.
+    const now = Date.parse(add.evolutions.seen_at);
+    const m = new Map((out.evolutions?.data ?? []).filter((e) => !e.end_at || Date.parse(e.end_at) > now).map((e) => [e.evo_id, e]));
+    for (const e of add.evolutions.data) m.set(e.evo_id, e);
+    out.evolutions = { seen_at: add.evolutions.seen_at, data: [...m.values()].slice(-150) };
+  }
   if (add.sbc_challenges) {
     // Each opened set adds its challenges; a set opened again replaces its own. Newest sets first, 300 challenges kept.
     const sets = new Set(add.sbc_challenges.data.map((c) => c.set_id));
@@ -555,7 +574,7 @@ export function mergeAccount(have: AccountState | undefined, add: AccountState):
 /** The newest seen_at across sections: the helper re-uploads when this moves. */
 export function accountStamp(s: AccountState | undefined): string | null {
   if (!s) return null;
-  const all = [s.balance, s.profile, s.tradepile, s.watchlist, s.unassigned, s.sbcs, s.sbc_challenges, s.objectives, s.season].map((x) => x?.seen_at).filter((x): x is string => !!x);
+  const all = [s.balance, s.profile, s.tradepile, s.watchlist, s.unassigned, s.sbcs, s.sbc_challenges, s.evolutions, s.objectives, s.season].map((x) => x?.seen_at).filter((x): x is string => !!x);
   return all.length ? all.sort().at(-1)! : null;
 }
 
