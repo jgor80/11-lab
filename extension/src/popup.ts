@@ -9,7 +9,7 @@ declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function refresh() {
-  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store", "account", "last_account"], (s: Stored) => {
+  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store", "account", "last_account", "store_seen"], (s: Stored) => {
     const today = new Date().toISOString().slice(0, 10);
     $("gb-status").textContent = s.helper_key
       ? `Connected (key ending ${s.helper_key.slice(-4)}). ${s.last_upload ? `Last upload ${new Date(s.last_upload).toLocaleString()}.` : "Nothing uploaded yet."} ${s.upload_note ?? ""}`.trim()
@@ -27,7 +27,11 @@ function refresh() {
     $("count").textContent = String(s.rows?.length ?? 0);
     $("pack-count").textContent = String(s.packs?.length ?? 0);
     $("pull-count").textContent = String(s.pulls?.length ?? 0);
-    $("pack-last").textContent = s.last_store ? `Last store capture ${new Date(s.last_store).toLocaleString()}` : "Open the Store in the Web App to capture its packs and odds.";
+    const seen = s.store_seen ?? [];
+    $("pack-last").textContent = s.last_store ? `Last store capture ${new Date(s.last_store).toLocaleString()}`
+      : seen.length ? `Saw ${seen.length} store answer${seen.length === 1 ? "" : "s"} but read no packs from them yet (shown on Pack Advisor).`
+      : "Open the Store in the Web App to capture its packs and odds. Nothing from the Store seen yet.";
+    $("pack-seen").textContent = seen.length ? seen.slice(0, 6).map((x) => `${x.path}: ${x.packs} packs, ${x.odds} odds`).join(" · ") : "";
     const a = s.account;
     const n = (v: number | null | undefined) => (v == null ? "–" : v.toLocaleString());
     $("acc-coins").textContent = n(a?.balance?.data.coins);

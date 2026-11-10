@@ -1,7 +1,7 @@
 // Extension side (isolated world): receives summaries from hook.ts and keeps them in the extension's own
 // storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
-import { mergePacks, mergePulls } from "../../src/store/capture.js";
+import { mergeOdds, mergePacks, mergePulls, mergeSeen } from "../../src/store/capture.js";
 import { accountStamp, mergeAccount } from "../../src/account/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
 import { mergeNames, mergeRows, type Stored } from "./store.js";
@@ -33,7 +33,7 @@ window.addEventListener("message", (e: MessageEvent) => {
     });
     return;
   }
-  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names", "account"], (s: Stored) => {
+  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names", "account", "store_odds", "store_seen", "store_shape"], (s: Stored) => {
     if (s.paused) return;
     const now = new Date().toISOString();
     if (Array.isArray(d.rows)) {
@@ -50,7 +50,14 @@ window.addEventListener("message", (e: MessageEvent) => {
     }
     if (d.store && Array.isArray(d.store.packs)) {
       const named = d.store.packs.map((p: { name: string | null; name_key: string | null }) => (!p.name && p.name_key && s.store_names?.[p.name_key] ? { ...p, name: s.store_names[p.name_key] } : p));
-      chrome.storage.local.set({ packs: mergePacks(s.packs ?? [], named, now), store_shape: d.store.shape ?? null, last_store: now });
+      const merged = mergeOdds(mergePacks(s.packs ?? [], named, now), s.store_odds, Array.isArray(d.store.odds) ? d.store.odds : []);
+      const read = named.length > 0 || (Array.isArray(d.store.odds) && d.store.odds.length > 0);
+      // The address and field names are kept even when nothing was read, and uploaded, so a miss can be seen on Gaffer Bot.
+      chrome.storage.local.set({
+        packs: merged.packs, store_odds: merged.held, store_shape: d.store.shape ?? s.store_shape ?? null,
+        ...(d.store.seen ? { store_seen: mergeSeen(s.store_seen, d.store.seen) } : {}),
+        ...(read ? { last_store: now } : {}), last_store_seen: now,
+      });
     }
     if (Array.isArray(d.pulls)) chrome.storage.local.set({ pulls: mergePulls(s.pulls ?? [], d.pulls), last_pull: now });
     if (d.account && typeof d.account === "object") {

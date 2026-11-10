@@ -77,8 +77,11 @@ export interface StoreCapture {
   packs: PackOffer[];
   pulls: PackPull[];
   /** Field names seen on store items and odds lines (no values), to check the shape against FC 27. */
-  shape: { pack_keys: string[]; odds_keys: string[]; category_keys: string[] };
+  shape: { pack_keys: string[]; odds_keys: string[]; category_keys: string[]; seen?: StoreSeen[] };
 }
+
+/** One store-like answer the helper saw: its address (numbers as N), top-level field names, and what it read. No values. */
+export interface StoreSeen { path: string; keys: string[]; packs: number; odds: number; at: string }
 
 const path = (url: string) => {
   try {
@@ -94,6 +97,16 @@ export const isStoreResponse = (url: string) => /\/ut\/game\/fc\d+\/store\/purch
 export const isPackOpen = (url: string) => /\/ut\/game\/fc\d+\/store\/purchaseGroup\/cardpack$/i.test(path(url));
 /** Opening a pack you already own (My Packs) in past seasons. */
 export const isOwnedPackOpen = (url: string) => /\/ut\/game\/fc\d+\/purchased\/items\/\d+$/i.test(path(url));
+/**
+ * Any other answer under a store, pack or odds address (FC 27 may have moved or split the store list and the odds).
+ * Read for packs and odds the same way, and logged by address so a miss can be seen. Pack opens are left out.
+ */
+export const isStoreLike = (url: string) => {
+  const p = path(url);
+  return /\/ut\/game\/fc\d+\/.*(?:store|pack|odds|purchasegroup)/i.test(p) && !isPackOpen(url) && !isOwnedPackOpen(url);
+};
+/** The address without host, query, season or ids: "/store/purchaseGroup/all", "/packodds/N". */
+export const storePath = (url: string) => path(url).replace(/^.*\/ut\/game\/fc\d+/i, "").replace(/\d+/g, "N").slice(0, 120);
 /** The unassigned pile the Web App shows after a pack opens. */
 export const isPurchasedItems = (url: string) => /\/ut\/game\/fc\d+\/purchased\/items$/i.test(path(url));
 
@@ -161,29 +174,67 @@ const iso = (v: unknown, now: number, kind: "epoch" | "seconds_from_now"): strin
   return ms > Date.UTC(2020, 0, 1) && ms < Date.UTC(2040, 0, 1) ? new Date(ms).toISOString() : null;
 };
 
+const ODDS_LISTS = ["packOdds", "odds", "packOddsList", "probabilities", "packProbabilities"] as const;
+const oddsListOf = (p: Record<string, unknown>): unknown[] => {
+  for (const k of ODDS_LISTS) if (Array.isArray(p[k])) return p[k] as unknown[];
+  const po = rec(p.packOdds);
+  for (const k of ODDS_LISTS) if (po && Array.isArray(po[k])) return po[k] as unknown[];
+  return [];
+};
+const packIdOf = (p: Record<string, unknown>) => int(p.id) ?? int(p.packId);
+/** Looks like a store pack: an id and a price, contents or odds. */
+const packLike = (p: Record<string, unknown>) =>
+  !!packIdOf(p) && (p.coins !== undefined || p.points !== undefined || Array.isArray(p.currencies) || !!rec(p.packContentInfo) || p.packType !== undefined || oddsListOf(p).length > 0);
+
 function packsOf(json: unknown): Record<string, unknown>[] {
   const j = rec(json);
   if (!j) return [];
-  // FC 26: { purchase: [...] }. Older seasons: { purchaseGroup: [{ packs|purchase: [...] }] }.
+  // FC 26: { purchase: [...] }. Older seasons: { purchaseGroup: [{ packs|purchase: [...] }] }. FC 27 is unconfirmed,
+  // so any list of pack-like objects a few levels down counts too.
   const out: Record<string, unknown>[] = [];
-  const add = (list: unknown) => Array.isArray(list) && list.forEach((p) => { const r = rec(p); if (r) out.push(r); });
+  const seen = new Set<Record<string, unknown>>();
+  const add = (list: unknown) => Array.isArray(list) && list.forEach((p) => { const r = rec(p); if (r && !seen.has(r)) { seen.add(r); out.push(r); } });
   add(j.purchase);
   add(j.packs);
   if (Array.isArray(j.purchaseGroup)) for (const g of j.purchaseGroup) { add(rec(g)?.packs); add(rec(g)?.purchase); }
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 4 || !v || typeof v !== "object") return;
+    if (Array.isArray(v)) {
+      const recs = v.slice(0, 500).map(rec).filter((r): r is Record<string, unknown> => !!r);
+      if (recs.some(packLike)) add(recs.filter(packLike));
+      else for (const r of recs.slice(0, 50)) walk(r, depth + 1);
+      return;
+    }
+    for (const x of Object.values(v as Record<string, unknown>)) walk(x, depth + 1);
+  };
+  walk(j, 0);
   return out;
+}
+
+/** Odds lines in an answer that carries no packs (a separate "pack probability" answer): pack id from the answer or address. */
+export function summarizeOddsOnly(json: unknown, url: string): { pack_id: number; odds: PackOdd[] } | null {
+  const j = rec(json) ?? {};
+  if (packsOf(j).length) return null;
+  let list = oddsListOf(j);
+  if (!list.length) for (const v of Object.values(j)) { const r = rec(v); if (r && oddsListOf(r).length) { list = oddsListOf(r); break; } }
+  if (!list.length && Array.isArray(json)) list = json;
+  const odds = list.map(summarizeOdd).filter((o): o is PackOdd => !!o);
+  const ids = path(url).match(/\d{3,12}/g);
+  const pack_id = int(j.packId) ?? int(j.id) ?? (ids ? int(ids.at(-1)) : null);
+  return odds.length && pack_id ? { pack_id, odds } : null;
 }
 
 export function summarizeStore(json: unknown, names: Record<string, string> = {}, now = Date.now()): PackOffer[] {
   const seen = new Set<number>();
   const out: PackOffer[] = [];
   for (const p of packsOf(json)) {
-    const pack_id = int(p.id);
+    const pack_id = packIdOf(p);
     if (!pack_id || seen.has(pack_id)) continue;
     // Packs only: bundles of points, cosmetics and the like have no card contents and no odds.
     const type = str(p.type, 40);
     const info = rec(p.packContentInfo);
-    const odds = (Array.isArray(p.packOdds) ? p.packOdds : []).map(summarizeOdd).filter((o): o is PackOdd => !!o);
-    if (type && !/pack/i.test(type) && !info && !odds.length) continue;
+    const odds = oddsListOf(p).map(summarizeOdd).filter((o): o is PackOdd => !!o);
+    if (type && !/pack/i.test(type) && !info && !odds.length && !int(p.coins)) continue;
     seen.add(pack_id);
     const name_key = str(p.nameLoc) ?? str(p.name);
     const coinsFromCurrencies = Array.isArray(p.currencies)
@@ -220,8 +271,20 @@ export function summarizeStore(json: unknown, names: Record<string, string> = {}
 export function storeShape(json: unknown): StoreCapture["shape"] {
   const packs = packsOf(json).slice(0, 20);
   const keys = (list: (Record<string, unknown> | null | undefined)[]) => [...new Set(list.flatMap((r) => (r ? Object.keys(r) : [])))].sort().slice(0, 120);
-  const odds = packs.flatMap((p) => (Array.isArray(p.packOdds) ? p.packOdds.slice(0, 5).map(rec) : []));
+  const odds = packs.flatMap((p) => oddsListOf(p).slice(0, 5).map(rec));
   return { pack_keys: keys(packs), odds_keys: keys(odds), category_keys: keys(odds.map((o) => rec(o?.packOddsCategory))) };
+}
+
+/** What a store-like answer looked like (address and top-level field names, never values) and what was read from it. */
+export function storeSeen(url: string, json: unknown, packs: number, odds: number, at = new Date().toISOString()): StoreSeen {
+  const j = rec(json);
+  const keys = j ? Object.keys(j).sort().slice(0, 40).map((k) => k.slice(0, 60)) : Array.isArray(json) ? ["[list]"] : [];
+  return { path: storePath(url), keys, packs, odds, at };
+}
+
+/** Newest sighting per address, at most 20. */
+export function mergeSeen(have: StoreSeen[] | undefined, add: StoreSeen): StoreSeen[] {
+  return [add, ...(have ?? []).filter((x) => x.path !== add.path)].slice(0, 20);
 }
 
 /** Localisation strings that look like store text (pack names and descriptions), capped. */
@@ -267,12 +330,33 @@ export function summarizePulls(json: unknown, pack_id: number | null, opened_at:
   return out;
 }
 
-/** Newest copy of each pack wins; packs not seen for 14 days drop off. */
+/**
+ * Newest copy of each pack wins, but a copy missing a price, name, contents or odds keeps the older value (the store
+ * list and the odds can arrive in different answers). Packs not seen for 14 days drop off.
+ */
 export function mergePacks(have: (PackOffer & { seen_at: string })[], add: PackOffer[], seen_at: string): (PackOffer & { seen_at: string })[] {
   const m = new Map(have.map((p) => [p.pack_id, p]));
-  for (const p of add) m.set(p.pack_id, { ...p, seen_at });
+  for (const p of add) {
+    const prev = m.get(p.pack_id);
+    if (!prev) { m.set(p.pack_id, { ...p, seen_at }); continue; }
+    const next = { ...prev } as PackOffer & { seen_at: string } & Record<string, unknown>;
+    for (const [k, v] of Object.entries(p)) if (v !== null && v !== undefined && k !== "odds") next[k] = v;
+    next.odds = p.odds.length ? p.odds : prev.odds;
+    next.seen_at = seen_at;
+    m.set(p.pack_id, next);
+  }
   const cutoff = new Date(Date.parse(seen_at) - 14 * 86_400_000).toISOString();
   return [...m.values()].filter((p) => p.seen_at >= cutoff);
+}
+
+/** Odds that came on their own: set on the pack when it's stored, else held (newest 200) until the store list arrives. */
+export function mergeOdds(packs: (PackOffer & { seen_at: string })[], held: Record<string, PackOdd[]> | undefined, add: { pack_id: number; odds: PackOdd[] }[]) {
+  const hold: Record<string, PackOdd[]> = { ...(held ?? {}) };
+  for (const a of add) hold[String(a.pack_id)] = a.odds;
+  const out = packs.map((p) => (hold[String(p.pack_id)] ? { ...p, odds: hold[String(p.pack_id)]! } : p));
+  const stored = new Set(packs.map((p) => String(p.pack_id)));
+  const left = Object.entries(hold).filter(([id]) => !stored.has(id)).slice(-200);
+  return { packs: out, held: Object.fromEntries(left) };
 }
 
 /** One row per item instance; keeps the newest 2,000. A later sighting keeps the pack id if it learned one. */

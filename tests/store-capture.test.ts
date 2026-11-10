@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreResponse, mergePacks, mergePulls, packIdFromBody, parseOdds, parseStoreStrings,
-  storeShape, summarizePulls, summarizeStore,
+  isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreLike, isStoreResponse, mergeOdds, mergePacks, mergePulls, mergeSeen, packIdFromBody, parseOdds, parseStoreStrings,
+  storeSeen, storePath, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore,
 } from "../src/store/capture.js";
 import { buildStoreExport, packPlan, PULL_BATCH } from "../src/market/upload.js";
 
@@ -93,12 +93,56 @@ describe("pack store capture", () => {
 
   it("plans pack uploads: the store when it changed, pulls not sent yet", () => {
     const pull = (m: number) => ({ item_id: m, ea_item_id: 9, item_type: null, rating: 80, rare_flag: 1, untradeable: false, pack_id: null, opened_at: new Date(NOW + m * 60_000).toISOString() });
-    expect(packPlan({})).toEqual({ store: false, pulls: [] });
-    expect(packPlan({ last_store: "a", store_sent: "a", pulls: [pull(1), pull(2)], pulls_sent_until: pull(1).opened_at })).toEqual({ store: false, pulls: [pull(2)] });
+    expect(packPlan({})).toEqual({ store: false, seen: false, pulls: [] });
+    expect(packPlan({ last_store: "a", store_sent: "a", pulls: [pull(1), pull(2)], pulls_sent_until: pull(1).opened_at })).toEqual({ store: false, seen: false, pulls: [pull(2)] });
+    expect(packPlan({ last_store_seen: "b", store_seen_sent: "a" }).seen).toBe(true);
     expect(packPlan({ last_store: "b", store_sent: "a" }).store).toBe(true);
     expect(packPlan({ pulls: Array.from({ length: PULL_BATCH + 5 }, (_, i) => pull(i)) }).pulls).toHaveLength(PULL_BATCH);
     const file = buildStoreExport([{ ...summarizeStore(store, {}, NOW)[0]!, seen_at: "x" }], [], null, "console", "t");
     expect(file).toMatchObject({ format: "xilab-store-capture", platform: "console", captured_at: "t" });
     expect("seen_at" in file.packs[0]!).toBe(false);
+  });
+
+  it("reads other store, pack and odds addresses and logs them without values", () => {
+    expect(isStoreLike(`${HOST}/store/purchaseGroup/all?ppInfo=true`)).toBe(true);
+    expect(isStoreLike(`${HOST}/store/packodds/101`)).toBe(true);
+    expect(isStoreLike(`${HOST}/packs/available`)).toBe(true);
+    expect(isStoreLike(`${HOST}/store/purchaseGroup/cardpack`)).toBe(false);
+    expect(isStoreLike(`${HOST}/club?type=player`)).toBe(false);
+    expect(storePath(`${HOST}/store/packodds/101?x=1`)).toBe("/store/packodds/N");
+    const seen = storeSeen(`${HOST}/store/v2/list`, { groups: [], secret: 5 }, 0, 0, "t");
+    expect(seen).toEqual({ path: "/store/vN/list", keys: ["groups", "secret"], packs: 0, odds: 0, at: "t" });
+    expect(mergeSeen([{ ...seen, at: "old" }, { ...seen, path: "/x" }], seen).map((x) => [x.path, x.at])).toEqual([["/store/vN/list", "t"], ["/x", "t"]]);
+  });
+
+  it("finds packs nested in an unfamiliar answer, with id or packId and other odds list names", () => {
+    const nested = { data: { sections: [{ title: "Gold", items: [
+      { packId: 555, coins: 5000, packContentInfo: { itemQuantity: 12 }, odds: [{ oddsFormatted: "5%", packOddsCategory: { description: "Player 84+ OVR" } }] },
+      { packId: 556, currencies: [{ name: "COINS", finalFunds: 2000 }] },
+      { packId: 557, type: "bundle", currencies: [{ name: "COINS", finalFunds: 2000 }] },
+    ] }] } };
+    const packs = summarizeStore(nested, {}, NOW);
+    expect(packs.map((p) => [p.pack_id, p.coins, p.odds.length])).toEqual([[555, 5000, 1], [556, 2000, 0]]);
+    expect(packs[0]!.odds[0]!.min_rating).toBe(84);
+  });
+
+  it("takes odds that come on their own and fills them in on the pack", () => {
+    const odds = summarizeOddsOnly({ packOdds: [{ oddsFormatted: "<1%", packOddsCategory: { description: "Icon" } }] }, `${HOST}/store/packodds/101`);
+    expect(odds?.pack_id).toBe(101);
+    expect(odds?.odds[0]!.special).toBe(true);
+    const [a] = summarizeStore(store, {}, NOW);
+    const bare = { ...a!, odds: [], seen_at: "s" };
+    const held = mergeOdds([], undefined, [odds!]);
+    expect(held.held["101"]).toHaveLength(1);
+    const later = mergeOdds([bare], held.held, []);
+    expect(later.packs[0]!.odds).toHaveLength(1);
+    expect(later.held).toEqual({});
+  });
+
+  it("a later copy without a price or odds keeps what the older one had", () => {
+    const [a] = summarizeStore(store, {}, NOW);
+    const merged = mergePacks([{ ...a!, seen_at: "2026-11-09T17:00:00.000Z" }], [{ ...a!, coins: null, odds: [] }], "2026-11-09T18:00:00.000Z");
+    expect(merged[0]!.coins).toBe(7500);
+    expect(merged[0]!.odds.length).toBe(a!.odds.length);
   });
 });
