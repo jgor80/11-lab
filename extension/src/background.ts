@@ -4,7 +4,8 @@
 import { captureRowsToCsv } from "../../src/market/capture.js";
 import { buildClubExport } from "../../src/club/capture.js";
 import { buildAccountExport } from "../../src/account/capture.js";
-import { accountDue, buildStoreExport, GAFFERBOT_API, packPlan, UPLOAD_EVERY_MINUTES, uploadOutcome, uploadPlan } from "../../src/market/upload.js";
+import { buildImagesExport } from "../../src/images/capture.js";
+import { accountDue, buildStoreExport, imagesDue, GAFFERBOT_API, packPlan, UPLOAD_EVERY_MINUTES, uploadOutcome, uploadPlan } from "../../src/market/upload.js";
 import { emptyNames, type Stored } from "./store.js";
 
 declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -26,7 +27,7 @@ async function upload() {
   if (running) return;
   running = true;
   try {
-    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent", "store_seen", "last_store_seen", "store_seen_sent"]);
+    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent", "store_seen", "last_store_seen", "store_seen_sent", "images", "last_images", "images_sent"]);
     if (!s.helper_key) return;
     const plan = uploadPlan(s);
     // Each part uploads on its own: one refused part no longer holds back the others. A dead key stops everything.
@@ -61,6 +62,12 @@ async function upload() {
       const r = await post(s.helper_key, "/helper/account", { ...buildAccountExport(s.account), platform: s.platform === "pc" ? "pc" : "console" });
       if (!r.ok) { if (await failed(r)) return; }
       else await set({ account_sent: s.last_account, last_upload: new Date().toISOString(), upload_note: done("Account uploaded.") });
+    }
+    // Card art addresses the Web App loaded (addresses only), whenever a new one was seen.
+    if (imagesDue(s) && s.images?.length) {
+      const r = await post(s.helper_key, "/helper/images", buildImagesExport(s.images));
+      if (!r.ok) { if (await failed({ ...r, note: `Card art: ${r.note}` })) return; }
+      else await set({ images_sent: s.last_images, last_upload: new Date().toISOString(), upload_note: done(`${s.images.length} card art addresses uploaded.`) });
     }
     if (plan.rows.length) {
       const r = await post(s.helper_key, "/helper/prices", { text: captureRowsToCsv(plan.rows) });

@@ -3,6 +3,7 @@
 import { mergeClubItems } from "../../src/club/capture.js";
 import { mergeOdds, mergePacks, mergePulls, mergeSeen } from "../../src/store/capture.js";
 import { accountStamp, mergeAccount } from "../../src/account/capture.js";
+import { mergeImages } from "../../src/images/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
 import { mergeNames, mergeRows, type Stored } from "./store.js";
 
@@ -33,7 +34,7 @@ window.addEventListener("message", (e: MessageEvent) => {
     });
     return;
   }
-  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names", "account", "store_odds", "store_seen", "store_shape"], (s: Stored) => {
+  chrome.storage.local.get(["rows", "platform", "paused", "club", "names", "packs", "pulls", "store_names", "account", "store_odds", "store_seen", "store_shape", "images"], (s: Stored) => {
     if (s.paused) return;
     const now = new Date().toISOString();
     if (Array.isArray(d.rows)) {
@@ -64,7 +65,15 @@ window.addEventListener("message", (e: MessageEvent) => {
       const account = mergeAccount(s.account, d.account);
       chrome.storage.local.set({ account, last_account: accountStamp(account) ?? now });
     }
-    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls) || d.account) {
+    // Card art addresses (never the images): sent to Gaffer Bot so it can learn EA's promo card art names.
+    if (Array.isArray(d.images)) {
+      const urls = d.images.filter((u: unknown): u is string => typeof u === "string" && u.length <= 400).slice(0, 200);
+      const known = new Set((s.images ?? []).map((x) => x.url));
+      const fresh = urls.some((u: string) => !known.has(u));
+      chrome.storage.local.set({ images: mergeImages(s.images, urls, now), ...(fresh ? { last_images: now } : {}) });
+      if (!fresh) return;
+    }
+    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls) || d.account || Array.isArray(d.images)) {
       try { chrome.runtime.sendMessage({ upload: "soon" }, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ }
     }
   });

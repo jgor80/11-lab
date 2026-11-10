@@ -10,6 +10,7 @@ import { isTransferMarketSearch, summarizeSearch } from "../../src/market/captur
 import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
 import { accountKind, readAccountResponse } from "../../src/account/capture.js";
+import { cardArtUrl } from "../../src/images/capture.js";
 import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreLike, packIdFromBody, parseStoreStrings, storeSeen, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore } from "../../src/store/capture.js";
 
 const TAG = "xilab-capture";
@@ -79,6 +80,33 @@ function emit(url: string, json: unknown, method = "GET") {
     if (Object.keys(names.teams).length + Object.keys(names.leagues).length + Object.keys(names.nations).length)
       window.postMessage({ [TAG]: true, names }, window.location.origin);
   }
+}
+
+// Card art addresses: the browser's own list of images this page loaded (resource timing), filtered to EA card art.
+// Only the address is passed on; the image itself is never read. Batched so a page of cards is one message.
+let artBatch = new Set<string>();
+let artTimer: ReturnType<typeof setTimeout> | null = null;
+const sentArt = new Set<string>();
+function noteArt(name: string) {
+  const url = cardArtUrl(name, window.location.href);
+  if (!url || sentArt.has(url)) return;
+  sentArt.add(url);
+  artBatch.add(url);
+  if (!artTimer) artTimer = setTimeout(() => {
+    const images = [...artBatch];
+    artBatch = new Set();
+    artTimer = null;
+    if (images.length) window.postMessage({ [TAG]: true, images }, window.location.origin);
+  }, 3000);
+}
+try {
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      try { noteArt(e.name); } catch { /* never get in the Web App's way */ }
+    }
+  }).observe({ type: "resource", buffered: true });
+} catch {
+  /* resource timing unavailable */
 }
 
 // The last search the user ran themselves: its address (as a template) and its headers (the session).
