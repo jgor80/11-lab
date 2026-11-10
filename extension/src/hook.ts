@@ -10,11 +10,11 @@ import { isTransferMarketSearch, summarizeSearch } from "../../src/market/captur
 import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
 import { accountKind, readAccountResponse } from "../../src/account/capture.js";
-import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreResponse, packIdFromBody, parseStoreStrings, storeShape, summarizePulls, summarizeStore } from "../../src/store/capture.js";
+import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreLike, packIdFromBody, parseStoreStrings, storeSeen, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore } from "../../src/store/capture.js";
 
 const TAG = "xilab-capture";
 const wanted = (url: string, method = "GET") => accountKind(url, method) !== null || isTransferMarketSearch(url) || isClubResponse(url) !== null || isPlayerNames(url) || isLocalisation(url)
-  || isStoreResponse(url) || isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url);
+  || isStoreLike(url) || isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url);
 
 // The pack the user opened last (their own click), so the items that follow can be credited to it.
 let lastOpen: { pack_id: number | null; at: number } | null = null;
@@ -37,12 +37,18 @@ function emit(url: string, json: unknown, method = "GET") {
     }
   }
   // Pack store: the packs, prices and odds the Store screen already shows. Never buys or opens anything.
-  if (isStoreResponse(url)) {
-    const packs = summarizeStore(json);
-    if (packs.length) window.postMessage({ [TAG]: true, store: { packs, shape: storeShape(json) } }, window.location.origin);
+  // Any store, pack or odds answer is read the same way and logged by address (never values), so a miss shows up.
+  if (isStoreLike(url)) {
+    try {
+      const packs = summarizeStore(json);
+      const oddsOnly = packs.length ? null : summarizeOddsOnly(json, url);
+      const seen = storeSeen(url, json, packs.length, packs.reduce((n, p) => n + p.odds.length, 0) + (oddsOnly?.odds.length ?? 0));
+      window.postMessage({ [TAG]: true, store: { packs, shape: packs.length ? storeShape(json) : null, odds: oddsOnly ? [oddsOnly] : [], seen } }, window.location.origin);
+    } catch {
+      /* never get in the Web App's way */
+    }
     return;
   }
-  // What a pack the user opened gave them: the open answer itself, or the unassigned pile right after an open.
   if (isPackOpen(url) || isOwnedPackOpen(url) || isPurchasedItems(url)) {
     if (!lastOpen || Date.now() - lastOpen.at > OPEN_WINDOW_MS) return; // sign-in loads the pile too: not a pull
     const pulls = summarizePulls(json, lastOpen.pack_id, new Date().toISOString());

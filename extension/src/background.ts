@@ -26,35 +26,46 @@ async function upload() {
   if (running) return;
   running = true;
   try {
-    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent"]);
+    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent", "store_seen", "last_store_seen", "store_seen_sent"]);
     if (!s.helper_key) return;
     const plan = uploadPlan(s);
+    // Each part uploads on its own: one refused part no longer holds back the others. A dead key stops everything.
+    const notes: string[] = [];
+    const failed = async (r: { note: string; key_dead: boolean }) => {
+      notes.push(r.note);
+      await set({ upload_note: notes.join(" "), ...(r.key_dead ? { helper_key: null } : {}) });
+      return r.key_dead;
+    };
+    const done = (msg: string) => [...notes, msg].join(" ");
     if (plan.club && s.club?.length) {
       const r = await post(s.helper_key, "/helper/club", buildClubExport(s.club, s.names ?? emptyNames()));
-      if (!r.ok) return void (await set({ upload_note: r.note, ...(r.key_dead ? { helper_key: null } : {}) }));
-      await set({ club_sent: s.last_club, last_upload: new Date().toISOString(), upload_note: "Club uploaded." });
+      if (!r.ok) { if (await failed(r)) return; }
+      else await set({ club_sent: s.last_club, last_upload: new Date().toISOString(), upload_note: done("Club uploaded.") });
     }
-    // Pack store and pack pulls (Pack Advisor). Packs only when the store changed; pulls once each.
+    // Pack store and pack pulls (Pack Advisor). Packs only when the store changed; pulls once each; the store
+    // addresses seen whenever there are new ones, even with no packs read, so a miss shows on Gaffer Bot.
     const packs = packPlan(s);
-    if (packs.store || packs.pulls.length) {
-      const r = await post(s.helper_key, "/helper/packs", buildStoreExport(packs.store ? s.packs ?? [] : [], packs.pulls, s.store_shape, s.platform === "pc" ? "pc" : "console"));
-      if (!r.ok) return void (await set({ upload_note: r.note, ...(r.key_dead ? { helper_key: null } : {}) }));
-      await set({
+    if (packs.store || packs.seen || packs.pulls.length) {
+      const r = await post(s.helper_key, "/helper/packs", buildStoreExport(packs.store ? s.packs ?? [] : [], packs.pulls, s.store_shape, s.platform === "pc" ? "pc" : "console", new Date().toISOString(), s.store_seen ?? []));
+      if (!r.ok) { if (await failed({ ...r, note: `Pack store: ${r.note}` })) return; }
+      else await set({
         ...(packs.store ? { store_sent: s.last_store } : {}),
+        ...(packs.seen ? { store_seen_sent: s.last_store_seen } : {}),
         ...(packs.pulls.length ? { pulls_sent_until: packs.pulls.at(-1)!.opened_at } : {}),
-        last_upload: new Date().toISOString(), upload_note: "Pack store uploaded.",
+        last_upload: new Date().toISOString(),
+        upload_note: done(packs.store ? `${(s.packs ?? []).length} store packs uploaded.` : packs.pulls.length ? "Pack pulls uploaded." : "Store seen, no packs read yet."),
       });
     }
     // Your account (coins, points, piles, SBCs, objectives) whenever the Web App showed something newer.
     if (accountDue(s) && s.account) {
       const r = await post(s.helper_key, "/helper/account", { ...buildAccountExport(s.account), platform: s.platform === "pc" ? "pc" : "console" });
-      if (!r.ok) return void (await set({ upload_note: r.note, ...(r.key_dead ? { helper_key: null } : {}) }));
-      await set({ account_sent: s.last_account, last_upload: new Date().toISOString(), upload_note: "Account uploaded." });
+      if (!r.ok) { if (await failed(r)) return; }
+      else await set({ account_sent: s.last_account, last_upload: new Date().toISOString(), upload_note: done("Account uploaded.") });
     }
     if (plan.rows.length) {
       const r = await post(s.helper_key, "/helper/prices", { text: captureRowsToCsv(plan.rows) });
-      if (!r.ok) return void (await set({ upload_note: r.note, ...(r.key_dead ? { helper_key: null } : {}) }));
-      await set({ sent_until: plan.rows.at(-1)!.observed_at, last_upload: new Date().toISOString(), upload_note: `${plan.rows.length} prices uploaded.` });
+      if (!r.ok) return void (await failed(r));
+      await set({ sent_until: plan.rows.at(-1)!.observed_at, last_upload: new Date().toISOString(), upload_note: done(`${plan.rows.length} prices uploaded.`) });
       // More than one batch waiting: carry on shortly.
       if (uploadPlan({ ...s, sent_until: plan.rows.at(-1)!.observed_at }).rows.length) chrome.alarms.create("upload-soon", { delayInMinutes: 0.5 });
     }

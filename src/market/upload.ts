@@ -3,7 +3,7 @@
 // download and import. It only forwards what it already recorded; it never sends anything extra to EA.
 // This module is the pure part: what is due to upload, and how an answer updates the helper's state.
 import type { CaptureRow } from "./capture.js";
-import type { PackOffer, PackPull, StoreCapture } from "../store/capture.js";
+import type { PackOffer, PackPull, StoreCapture, StoreSeen } from "../store/capture.js";
 
 export const GAFFERBOT_API = "https://gafferbot.app/api/functions/v1/fut-api/v1";
 export const HELPER_KEY_PREFIX = "xlh_";
@@ -27,6 +27,9 @@ export interface UploadState {
   /** Pack pulls, and the opened_at of the newest one uploaded. */
   pulls?: PackPull[];
   pulls_sent_until?: string;
+  /** Store answers seen (even ones nothing could be read from), and which sighting was last uploaded. */
+  last_store_seen?: string;
+  store_seen_sent?: string;
   /** Account capture: the newest section time, and the one last uploaded. */
   last_account?: string;
   account_sent?: string;
@@ -38,19 +41,22 @@ export const accountDue = (s: UploadState) => !!s.last_account && s.last_account
 /** Pulls per upload. */
 export const PULL_BATCH = 500;
 
-/** Store packs due (when the store changed since the last upload) and pulls not uploaded yet. */
-export function packPlan(s: UploadState): { store: boolean; pulls: PackPull[] } {
+/**
+ * Store packs due (when the store changed since the last upload), pulls not uploaded yet, and whether new store
+ * answers were seen (sent even with no packs, so Gaffer Bot can show which addresses the helper saw).
+ */
+export function packPlan(s: UploadState): { store: boolean; seen: boolean; pulls: PackPull[] } {
   const pulls = (s.pulls ?? []).filter((p) => !s.pulls_sent_until || p.opened_at > s.pulls_sent_until)
     .sort((a, b) => a.opened_at.localeCompare(b.opened_at)).slice(0, PULL_BATCH);
-  return { store: !!s.last_store && s.last_store !== s.store_sent, pulls };
+  return { store: !!s.last_store && s.last_store !== s.store_sent, seen: !!s.last_store_seen && s.last_store_seen !== s.store_seen_sent, pulls };
 }
 
 /** The pack file sent to Gaffer Bot (POST /helper/packs). Packs are sent only when the store changed. */
-export function buildStoreExport(packs: (PackOffer & { seen_at?: string })[], pulls: PackPull[], shape: StoreCapture["shape"] | null | undefined, platform: "console" | "pc", captured_at = new Date().toISOString()): StoreCapture & { platform: "console" | "pc" } {
+export function buildStoreExport(packs: (PackOffer & { seen_at?: string })[], pulls: PackPull[], shape: StoreCapture["shape"] | null | undefined, platform: "console" | "pc", captured_at = new Date().toISOString(), seen: StoreSeen[] = []): StoreCapture & { platform: "console" | "pc" } {
   return {
     format: "xilab-store-capture", version: 1, verified: false, captured_at, platform,
     packs: packs.map(({ seen_at: _s, ...p }) => p), pulls,
-    shape: shape ?? { pack_keys: [], odds_keys: [], category_keys: [] },
+    shape: { pack_keys: shape?.pack_keys ?? [], odds_keys: shape?.odds_keys ?? [], category_keys: shape?.category_keys ?? [], seen },
   };
 }
 
