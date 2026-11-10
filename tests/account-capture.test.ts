@@ -127,3 +127,39 @@ describe("account capture", () => {
     expect(buildAccountExport(s, "2026-11-09T20:00:00.000Z")).toMatchObject({ format: "xilab-account-capture", version: 1, verified: false });
   });
 });
+
+describe("SBC challenges (opened set)", () => {
+  const URL_ = "https://utas.mob.v5.prd.futc-ext.gcp.ea.com/ut/game/fc27/sbs/setId/4242/challenges";
+  const answer = { challenges: [{
+    challengeId: 9001, name: "Top Form", description: "Hand in a squad", formation: "f4231", status: "NOT_STARTED", elgOperation: "AND",
+    elgReq: [
+      { type: "TEAM_RATING", eligibilitySlot: -1, eligibilityValue: 84, count: -1, scope: "GREATER" },
+      { type: "LEAGUE_ID", eligibilityValues: [13, "16"], count: 2, scope: 0 },
+      { nothing: true },
+    ],
+    awards: [{ type: "pack", value: 555, count: 1, untradeable: true }],
+  }, { name: "no id" }] };
+
+  it("reads the set id from the address and each challenge's requirements", () => {
+    expect(accountKind(URL_)).toBe("sbc_challenges");
+    expect(accountKind(URL_, "PUT")).toBeNull();
+    const patch = readAccountResponse("sbc_challenges", answer, Date.UTC(2026, 10, 10), URL_);
+    const list = patch.sbc_challenges!.data;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ set_id: 4242, challenge_id: 9001, formation: "f4231", operation: "AND" });
+    expect(list[0]!.requirements).toEqual([
+      { type: "TEAM_RATING", scope: "GREATER", values: [84], count: -1, slot: -1 },
+      { type: "LEAGUE_ID", scope: "GREATER", values: [13, 16], count: 2, slot: null },
+    ]);
+    expect(patch.shape!.sbc_requirement).toContain("eligibilityValue");
+  });
+
+  it("keeps challenges from several opened sets, a reopened set replacing its own", () => {
+    const at = (t: number, set: number, id: number) => ({ sbc_challenges: { seen_at: new Date(t).toISOString(), data: [{ set_id: set, challenge_id: id, name: `c${id}`, description: null, formation: null, status: null, operation: null, requirements: [], awards: [], end_at: null }] } });
+    let s = mergeAccount(undefined, at(1000, 1, 10));
+    s = mergeAccount(s, at(2000, 2, 20));
+    s = mergeAccount(s, at(3000, 1, 11));
+    expect(s.sbc_challenges!.data.map((c) => c.challenge_id)).toEqual([11, 20]);
+    expect(accountStamp(s)).toBe(new Date(3000).toISOString());
+  });
+});
