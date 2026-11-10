@@ -163,3 +163,35 @@ describe("SBC challenges (opened set)", () => {
     expect(accountStamp(s)).toBe(new Date(3000).toISOString());
   });
 });
+
+describe("Evolutions (academy answers)", () => {
+  const HUB = "https://utas.mob.v5.prd.futc-ext.gcp.ea.com/ut/game/fc27/academy/hub";
+  const answer = { slots: [{
+    academyId: 31, name: "Midfield Maestro", description: "Turn a CM into a playmaker", endTime: 86_400, price: { coins: 15000, points: 0 },
+    eligibilityRequirements: [{ type: "OVR", value: 82, scope: "LOWER" }, { attribute: "POSITION", values: ["CM", "CDM"] }],
+    levels: [{ upgrades: [{ attribute: "OVR", value: 2 }, { attribute: "PASSING", value: 3 }] }, { upgrades: [{ type: "PLAYSTYLE", value: "Incisive Pass" }] }],
+  }, { academyId: 32, name: "No rules or levels" }] };
+
+  it("reads evolutions with requirements and level upgrades from any academy answer", () => {
+    expect(accountKind(HUB)).toBe("evolutions");
+    expect(accountKind(HUB.replace("hub", "slot/31"))).toBe("evolutions");
+    const patch = readAccountResponse("evolutions", answer, Date.UTC(2026, 10, 10), HUB);
+    const list = patch.evolutions!.data;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ evo_id: 31, name: "Midfield Maestro", coins: 15000 });
+    expect(list[0]!.requirements).toEqual([{ type: "OVR", values: [82], scope: "LOWER" }, { type: "POSITION", values: ["CM", "CDM"], scope: null }]);
+    expect(list[0]!.levels).toEqual([
+      { upgrades: [{ type: "OVR", values: [2], scope: null }, { type: "PASSING", values: [3], scope: null }] },
+      { upgrades: [{ type: "PLAYSTYLE", values: ["Incisive Pass"], scope: null }] },
+    ]);
+    expect(patch.shape!.evolution).toContain("eligibilityRequirements");
+    expect(patch.shape!.evolution_upgrade).toContain("attribute");
+  });
+
+  it("adds evolutions from several answers and drops ended ones", () => {
+    const evo = (id: number, end: string | null) => ({ evo_id: id, name: `e${id}`, description: null, end_at: end, coins: null, points: null, status: null, requirements: [], levels: [] });
+    let s = mergeAccount(undefined, { evolutions: { seen_at: "2026-11-10T00:00:00.000Z", data: [evo(1, "2026-11-10T01:00:00.000Z"), evo(2, null)] } });
+    s = mergeAccount(s, { evolutions: { seen_at: "2026-11-10T02:00:00.000Z", data: [evo(3, null)] } });
+    expect(s.evolutions!.data.map((e) => e.evo_id)).toEqual([2, 3]);
+  });
+});
