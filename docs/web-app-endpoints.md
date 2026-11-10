@@ -196,6 +196,7 @@ are never kept.
 | `GET …/watchlist` | Sign-in, Transfer Targets | Same, plus `bidState` (highest / outbid) for winning, outbid, won and lost |
 | `GET …/purchased/items` | Sign-in, after packs | `itemData[]` and `duplicateItemIdList[] { itemId }` |
 | `GET …/sbs/sets` | Opening SBCs | `categories[] { name, sets[] { setId, name, challengesCount, challengesCompletedCount, timesCompleted, repeatabilityMode, repeats, endTime, hidden, awards[] { type, value, count, untradeable } } }` |
+| `GET …/sbs/setId/<id>/challenges` | Opening one SBC set | `challenges[] { challengeId, name, description, formation, status, elgOperation, elgReq[] { type, eligibilityValue(s), eligibilitySlot, count, scope }, awards[] }` (UNVERIFIED on FC 27; the helper keeps the field names it sees as `shape.sbc_challenge` / `shape.sbc_requirement`) |
 | `GET …/scmp/campaign…` | Opening Objectives | Layout unknown: any object with a name and a progress / target pair (`progress`/`target`, `currentValue`/`targetValue`, …) counts as one objective, grouped under its nearest named parent, with `xp` and end time when present |
 | `GET …/scmp/data/lite`, `fcas…/fc/user/season/lite` | Sign-in | Numeric fields named like level / XP / tier / points / rank from the top two levels |
 

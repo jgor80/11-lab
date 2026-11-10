@@ -84,6 +84,34 @@ export interface SbcSet {
   awards: SbcAward[];
 }
 
+/** One SBC requirement as EA sent it (FC 27 field names unverified): read by the site, never here. */
+export interface SbcRequirementRaw {
+  /** EA's requirement type, e.g. TEAM_RATING, CHEMISTRY_POINTS, LEAGUE_ID (or the numeric key when no name came). */
+  type: string;
+  /** GREATER / LOWER / EXACT (min / max / exactly) when sent. */
+  scope: string | null;
+  values: number[];
+  /** How many players it applies to (-1 or null = all / the squad). */
+  count: number | null;
+  slot: number | null;
+}
+
+/** One challenge inside an SBC set, from the answer the Web App loads when the user opens that set. */
+export interface SbcChallenge {
+  set_id: number;
+  challenge_id: number;
+  name: string;
+  description: string | null;
+  /** EA's formation code, e.g. f4231. */
+  formation: string | null;
+  status: string | null;
+  /** AND / OR between requirements, when sent. */
+  operation: string | null;
+  requirements: SbcRequirementRaw[];
+  awards: SbcAward[];
+  end_at: string | null;
+}
+
 export interface Objective {
   id: number | null;
   name: string;
@@ -104,6 +132,8 @@ export interface AccountState {
   watchlist?: Section<TradeItem[]>;
   unassigned?: Section<UnassignedItem[]>;
   sbcs?: Section<SbcSet[]>;
+  /** Challenges (with requirements) of the SBC sets the user opened, newest first. */
+  sbc_challenges?: Section<SbcChallenge[]>;
   objectives?: Section<Objective[]>;
   /** Season progress numbers (level, XP and the like) by EA's own key. */
   season?: Section<Record<string, number>>;
@@ -129,7 +159,7 @@ const path = (url: string) => {
 };
 const ut = (rest: string) => new RegExp(`/ut/game/fc\\d+/${rest}$`, "i");
 
-export type AccountKind = "massinfo" | "credits" | "tradepile" | "watchlist" | "unassigned" | "sbcs" | "objectives" | "season";
+export type AccountKind = "massinfo" | "credits" | "tradepile" | "watchlist" | "unassigned" | "sbcs" | "sbc_challenges" | "objectives" | "season";
 
 /** The account response this URL is, or null. Only GETs the Web App makes by itself or on the user's own clicks. */
 export function accountKind(url: string, method = "GET"): AccountKind | null {
@@ -141,6 +171,7 @@ export function accountKind(url: string, method = "GET"): AccountKind | null {
   if (ut("watchlist").test(p)) return "watchlist";
   if (ut("purchased/items").test(p)) return "unassigned";
   if (ut("sbs/sets").test(p)) return "sbcs";
+  if (ut("sbs/setId/\\d+/challenges").test(p)) return "sbc_challenges";
   if (/\/ut\/game\/fc\d+\/scmp\/campaign/i.test(p)) return "objectives";
   if (ut("scmp/data/lite").test(p) || /\/fc\/user\/season(\/lite)?$/i.test(p)) return "season";
   return null;
@@ -324,6 +355,52 @@ export function readSbcSets(json: unknown, now = Date.now()): SbcSet[] | null {
   return out;
 }
 
+/** The set id in `sbs/setId/<id>/challenges`. */
+export function sbcSetIdFromUrl(url: string): number | null {
+  const m = /\/sbs\/setId\/(\d{1,10})\/challenges/i.exec(path(url));
+  return m ? int(m[1]) : null;
+}
+
+const SCOPES: Record<string, string> = { "0": "GREATER", "1": "LOWER", "2": "EXACT" };
+
+function requirement(raw: unknown): SbcRequirementRaw | null {
+  const r = rec(raw);
+  if (!r) return null;
+  const type = str(r.type, 60) ?? str(r.eligibilityKey, 60) ?? (nonNeg(r.eligibilityKey, 1000) !== null ? String(r.eligibilityKey) : null);
+  if (!type) return null;
+  const raws = Array.isArray(r.eligibilityValues) ? r.eligibilityValues : Array.isArray(r.values) ? r.values : [r.eligibilityValue ?? r.value];
+  const values = raws.map((v) => (typeof v === "number" && Number.isInteger(v) && Math.abs(v) < 2 ** 31 ? v : typeof v === "string" && /^-?\d{1,10}$/.test(v) ? Number(v) : null))
+    .filter((v): v is number => v !== null).slice(0, 40);
+  const scopeRaw = r.scope ?? r.eligibilityScope ?? r.operation;
+  const scope = typeof scopeRaw === "string" ? scopeRaw.toUpperCase().slice(0, 20) : typeof scopeRaw === "number" ? SCOPES[String(scopeRaw)] ?? String(scopeRaw) : null;
+  const count = typeof r.count === "number" && Number.isInteger(r.count) && r.count >= -1 && r.count <= 30 ? r.count : null;
+  const slot = typeof r.eligibilitySlot === "number" && Number.isInteger(r.eligibilitySlot) && r.eligibilitySlot >= -1 && r.eligibilitySlot <= 30 ? r.eligibilitySlot : null;
+  return { type: type.toUpperCase(), scope, values, count, slot };
+}
+
+/** An opened SBC set: { challenges: [{ challengeId, name, formation, elgReq: [...], awards, status, … }] }. */
+export function readSbcChallenges(json: unknown, setId: number | null, now = Date.now()): SbcChallenge[] | null {
+  const j = rec(json);
+  const list = Array.isArray(j?.challenges) ? j!.challenges as unknown[] : Array.isArray(json) ? json as unknown[] : null;
+  if (!list || !setId) return null;
+  const out: SbcChallenge[] = [];
+  for (const c of list.slice(0, 60)) {
+    const r = rec(c);
+    const challenge_id = int(r?.challengeId) ?? int(r?.id);
+    const name = str(r?.name, 120);
+    if (!r || !challenge_id || !name) continue;
+    const reqs = Array.isArray(r.elgReq) ? r.elgReq : Array.isArray(r.requirements) ? r.requirements : Array.isArray(r.eligibilityRequirements) ? r.eligibilityRequirements : [];
+    out.push({
+      set_id: setId, challenge_id, name, description: str(r.description, 300),
+      formation: str(r.formation, 20), status: str(r.status, 30), operation: str(r.elgOperation, 10) ?? str(r.operation, 10),
+      requirements: reqs.map(requirement).filter((x): x is SbcRequirementRaw => !!x).slice(0, 20),
+      awards: (Array.isArray(r.awards) ? r.awards : []).map(award).filter((a): a is SbcAward => !!a).slice(0, 10),
+      end_at: secondsToIso(r.endTime, now) ?? epochToIso(r.endTimeStamp),
+    });
+  }
+  return out;
+}
+
 const NAME_KEYS = ["name", "title", "description", "nameLoc", "titleLoc"] as const;
 const PROGRESS_PAIRS: [string, string][] = [
   ["progress", "target"], ["currentValue", "targetValue"], ["progressValue", "targetValue"], ["completedCount", "totalCount"],
@@ -381,7 +458,7 @@ export function readSeason(json: unknown): Record<string, number> | null {
 // ------------------------------------------------------------------ one response → state patch
 
 /** What one Web App response adds to the account state (sections it doesn't carry are left out). */
-export function readAccountResponse(kind: AccountKind, json: unknown, now = Date.now()): AccountState {
+export function readAccountResponse(kind: AccountKind, json: unknown, now = Date.now(), url = ""): AccountState {
   const seen_at = new Date(now).toISOString();
   const patch: AccountState = { shape: { [kind]: keys(json).filter((k) => !PERSONAL.test(k)) } };
   const balanceFrom = (b: Balance | null) => { if (b) patch.balance = { seen_at, data: b }; };
@@ -417,6 +494,17 @@ export function readAccountResponse(kind: AccountKind, json: unknown, now = Date
       if (sets) patch.sbcs = { seen_at, data: sets };
       break;
     }
+    case "sbc_challenges": {
+      const list = readSbcChallenges(json, sbcSetIdFromUrl(url), now);
+      if (list?.length) patch.sbc_challenges = { seen_at, data: list };
+      const first = rec(Array.isArray(rec(json)?.challenges) ? (rec(json)!.challenges as unknown[])[0] : null);
+      if (first) {
+        patch.shape!.sbc_challenge = keys(first);
+        const req = rec(Array.isArray(first.elgReq) ? first.elgReq[0] : null);
+        if (req) patch.shape!.sbc_requirement = keys(req);
+      }
+      break;
+    }
     case "objectives": {
       const list = readObjectives(json, now);
       // Several campaign answers load one after another (one per tab): an empty one doesn't wipe the others.
@@ -442,6 +530,12 @@ export function mergeAccount(have: AccountState | undefined, add: AccountState):
   out.watchlist = newer(out.watchlist, add.watchlist);
   out.unassigned = newer(out.unassigned, add.unassigned);
   out.sbcs = newer(out.sbcs, add.sbcs);
+  if (add.sbc_challenges) {
+    // Each opened set adds its challenges; a set opened again replaces its own. Newest sets first, 300 challenges kept.
+    const sets = new Set(add.sbc_challenges.data.map((c) => c.set_id));
+    const kept = (out.sbc_challenges?.data ?? []).filter((c) => !sets.has(c.set_id));
+    out.sbc_challenges = { seen_at: add.sbc_challenges.seen_at, data: [...add.sbc_challenges.data, ...kept].slice(0, 300) };
+  }
   out.season = add.season && out.season && Date.parse(add.season.seen_at) - Date.parse(out.season.seen_at) < 10 * 60_000
     ? { seen_at: add.season.seen_at, data: { ...out.season.data, ...add.season.data } } : newer(out.season, add.season);
   if (add.objectives) {
@@ -461,7 +555,7 @@ export function mergeAccount(have: AccountState | undefined, add: AccountState):
 /** The newest seen_at across sections: the helper re-uploads when this moves. */
 export function accountStamp(s: AccountState | undefined): string | null {
   if (!s) return null;
-  const all = [s.balance, s.profile, s.tradepile, s.watchlist, s.unassigned, s.sbcs, s.objectives, s.season].map((x) => x?.seen_at).filter((x): x is string => !!x);
+  const all = [s.balance, s.profile, s.tradepile, s.watchlist, s.unassigned, s.sbcs, s.sbc_challenges, s.objectives, s.season].map((x) => x?.seen_at).filter((x): x is string => !!x);
   return all.length ? all.sort().at(-1)! : null;
 }
 
