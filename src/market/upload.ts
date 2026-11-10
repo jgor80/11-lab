@@ -33,7 +33,13 @@ export interface UploadState {
   /** Account capture: the newest section time, and the one last uploaded. */
   last_account?: string;
   account_sent?: string;
+  /** Card art addresses: when a new one was last seen, and which sighting was last uploaded. */
+  last_images?: string;
+  images_sent?: string;
 }
+
+/** Card art addresses are uploaded whenever a new one was seen since the last upload. */
+export const imagesDue = (s: UploadState) => !!s.last_images && s.last_images !== s.images_sent;
 
 /** The account is uploaded whenever any section of it is newer than the last upload. */
 export const accountDue = (s: UploadState) => !!s.last_account && s.last_account !== s.account_sent;

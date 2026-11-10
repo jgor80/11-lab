@@ -9,7 +9,7 @@ declare const chrome: any; // eslint-disable-line @typescript-eslint/no-explicit
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function refresh() {
-  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store", "account", "last_account", "store_seen"], (s: Stored) => {
+  chrome.storage.local.get(["helper_key", "last_upload", "upload_note", "rows", "platform", "paused", "last_capture", "club", "last_club", "pc_day", "pc_count", "pc_running", "pc_stopped", "pc_learned", "pc_note", "pc_auto", "pc_first_day", "pc_log", "pc_cooldown_until", "packs", "pulls", "last_store", "account", "last_account", "store_seen", "images"], (s: Stored) => {
     const today = new Date().toISOString().slice(0, 10);
     $("gb-status").textContent = s.helper_key
       ? `Connected (key ending ${s.helper_key.slice(-4)}). ${s.last_upload ? `Last upload ${new Date(s.last_upload).toLocaleString()}.` : "Nothing uploaded yet."} ${s.upload_note ?? ""}`.trim()
@@ -45,6 +45,7 @@ function refresh() {
       a.objectives ? `${a.objectives.data.length} objectives` : null,
     ].filter(Boolean).join(" · ") : "";
     $("acc-last").textContent = s.last_account ? `Last account capture ${new Date(s.last_account).toLocaleString()}` : "Sign in to the Web App to capture your balance and piles.";
+    $("art-count").textContent = String(s.images?.length ?? 0);
     $("club-count").textContent = String(s.club?.length ?? 0);
     $("club-last").textContent = s.last_club ? `Last club capture ${new Date(s.last_club).toLocaleString()}` : "Open your Club in the Web App to capture it.";
     $("last").textContent = s.last_capture ? `Last capture ${new Date(s.last_capture).toLocaleString()}` : "No captures yet.";
@@ -88,6 +89,8 @@ $("club-download").addEventListener("click", () =>
     a.click();
   }),
 );
+$("art-copy").addEventListener("click", () =>
+  chrome.storage.local.get(["images"], (s: Stored) => navigator.clipboard.writeText((s.images ?? []).map((x) => x.url).join("\n")).then(() => ($("art-note").textContent = "Copied."))));
 $("acc-clear").addEventListener("click", () => {
   if (confirm("Delete the stored account capture? The helper copies it again next time the Web App loads it.")) chrome.storage.local.set({ account: {}, last_account: "" }, refresh);
 });

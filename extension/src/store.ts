@@ -1,6 +1,7 @@
 import { MAX_LAST_SALES, type CaptureRow } from "../../src/market/capture.js";
 import type { ClubItem, ClubNames } from "../../src/club/capture.js";
 import type { AccountState } from "../../src/account/capture.js";
+import type { ImageSeen } from "../../src/images/capture.js";
 import type { PackOdd, PackOffer, PackPull, StoreCapture, StoreSeen } from "../../src/store/capture.js";
 
 export interface Stored {
@@ -37,6 +38,10 @@ export interface Stored {
   /** Odds that arrived before their pack (by pack id), and the store answers seen (address + field names only). */
   store_odds?: Record<string, PackOdd[]>;
   store_seen?: StoreSeen[];
+  /** Card art addresses the Web App loaded (addresses only), when a new one was last seen, and the last one uploaded. */
+  images?: ImageSeen[];
+  last_images?: string;
+  images_sent?: string;
   last_store_seen?: string;
   store_seen_sent?: string;
   /** Items from packs the user opened, and the opened_at of the newest one uploaded. */
