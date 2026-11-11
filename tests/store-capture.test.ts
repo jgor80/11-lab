@@ -161,4 +161,12 @@ describe("pack store capture", () => {
     expect(p).toMatchObject({ asset_id: 3021, image_url: "https://www.ea.com/x/packs/pack_3021.png" });
     expect(summarizeStore({ purchase: [{ id: 9, coins: 100, imageUrl: "https://evil.example/p.png" }] }, {}, NOW)[0]!.image_url).toBeNull();
   });
+
+  it("reads when a pack leaves the store from a countdown, an epoch or a date", () => {
+    const at = (x: Record<string, unknown>) => summarizeStore({ purchase: [{ id: 1, coins: 100, ...x }] }, {}, NOW)[0]!.end_at;
+    expect(at({ secondsUntilEnd: 3600 })).toBe(new Date(NOW + 3_600_000).toISOString());
+    expect(at({ expiryTime: Math.floor(NOW / 1000) + 60 })).toBe(new Date(NOW + 60_000).toISOString());
+    expect(at({ availability: { endDate: "2026-11-14T18:00:00Z" } })).toBe("2026-11-14T18:00:00.000Z");
+    expect(at({ end: "soon" })).toBeNull();
+  });
 });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XI Lab capture",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Copies what the EA FC Web App already shows you, for XI Lab: transfer-market prices from your own searches, your club when you open it, and the pack store and pack odds when you open the Store, and your account (coins, FC Points, transfer list, watchlist, unassigned, SBCs, objectives) as the Web App loads it, and the addresses of card backgrounds it loads. Optional slow price check for your own cards, and optional upload to your Gaffer Bot account. Never bids, buys, opens, lists or moves anything.",
   "permissions": [
     "storage",

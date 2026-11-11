@@ -187,6 +187,13 @@ Names that load after the store are filled in and re-uploaded. Each pack also ke
 imageAssetId / artId) and `image_url` when the item carries an EA picture address, and the image-address log keeps
 any EA picture with "pack" in its path, so Pack Advisor can match a picture to each pack. All hypotheses on FC 27.
 
+Since v0.12.0: FC 27's store data didn't carry readable names (Jeff saw only ids), but the Store screen shows them.
+The helper reads the visible text of each store tile (one line per text node: name, "Includes ..." description,
+"User limit: N", "Ending: 2 Days 14 Hours", coin and FC Points prices, item count) and the tile's picture address, a
+couple of seconds after the page changes (`src/store/tiles.ts`). Tiles are matched to captured packs by coin price, FC
+Points and item count; a tile with no captured pack becomes a pack of its own (id 900000000000 + name hash, no odds).
+Read-only: no clicks, no requests.
+
 ## Your account (helper v0.6.0, bodies not captured yet)
 
 The **addresses** are verified (they load at sign-in, see the sign-in sequence above); the **bodies** are hypotheses
