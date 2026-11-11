@@ -50,7 +50,7 @@ describe("store tiles", () => {
     const tiles = [parseStoreTile(EUROPEAN)!, parseStoreTile(JUMBO)!, { ...parseStoreTile(JUMBO)!, name: "Starlit Nights Pack", coins: 40_000, points: null }];
     const out = applyTiles(packs, tiles, NOW);
     expect(out.map((p) => [p.pack_id, p.name])).toEqual([[501, "European Dreams Pack"], [502, "Jumbo Gold Players Pack"], [tileId("Starlit Nights Pack"), "Starlit Nights Pack"]]);
-    expect(out[0]).toMatchObject({ end_at: new Date(NOW + (2 * 86_400 + 14 * 3600) * 1000).toISOString(), purchase_limit: 3, untradeable: true, seen_at: new Date(NOW).toISOString() });
+    expect(out[0]).toMatchObject({ end_at: new Date(NOW + (2 * 86_400 + 14 * 3600) * 1000).toISOString(), purchase_limit: 3, untradeable: true, seen_at: new Date(NOW).toISOString(), shown_at: new Date(NOW).toISOString() });
     // Once the store data has that pack too, the tile-only copy goes
     const later = applyTiles([...out.map((p) => ({ ...p, seen_at: "x" })), { ...packs[1]!, pack_id: 503, coins: 40_000, points: null, name: null }], [tiles[2]!], NOW);
     expect(later.filter((p) => p.name === "Starlit Nights Pack").map((p) => p.pack_id)).toEqual([503]);

@@ -30,6 +30,9 @@ export interface UploadState {
   /** Store answers seen (even ones nothing could be read from), and which sighting was last uploaded. */
   last_store_seen?: string;
   store_seen_sent?: string;
+  /** The popup's "Clear stored packs", and the clear last sent. */
+  pack_reset?: string;
+  pack_reset_sent?: string;
   /** Account capture: the newest section time, and the one last uploaded. */
   last_account?: string;
   account_sent?: string;
@@ -51,16 +54,17 @@ export const PULL_BATCH = 500;
  * Store packs due (when the store changed since the last upload), pulls not uploaded yet, and whether new store
  * answers were seen (sent even with no packs, so Gaffer Bot can show which addresses the helper saw).
  */
-export function packPlan(s: UploadState): { store: boolean; seen: boolean; pulls: PackPull[] } {
+export function packPlan(s: UploadState): { store: boolean; seen: boolean; reset: boolean; pulls: PackPull[] } {
   const pulls = (s.pulls ?? []).filter((p) => !s.pulls_sent_until || p.opened_at > s.pulls_sent_until)
     .sort((a, b) => a.opened_at.localeCompare(b.opened_at)).slice(0, PULL_BATCH);
-  return { store: !!s.last_store && s.last_store !== s.store_sent, seen: !!s.last_store_seen && s.last_store_seen !== s.store_seen_sent, pulls };
+  const reset = !!s.pack_reset && s.pack_reset !== s.pack_reset_sent;
+  return { store: reset || (!!s.last_store && s.last_store !== s.store_sent), seen: !!s.last_store_seen && s.last_store_seen !== s.store_seen_sent, reset, pulls };
 }
 
 /** The pack file sent to Gaffer Bot (POST /helper/packs). Packs are sent only when the store changed, each with when it was last seen. */
-export function buildStoreExport(packs: (PackOffer & { seen_at?: string })[], pulls: PackPull[], shape: StoreCapture["shape"] | null | undefined, platform: "console" | "pc", captured_at = new Date().toISOString(), seen: StoreSeen[] = []): StoreCapture & { platform: "console" | "pc" } {
+export function buildStoreExport(packs: (PackOffer & { seen_at?: string })[], pulls: PackPull[], shape: StoreCapture["shape"] | null | undefined, platform: "console" | "pc", captured_at = new Date().toISOString(), seen: StoreSeen[] = [], reset = false): StoreCapture & { platform: "console" | "pc"; reset?: true } {
   return {
-    format: "xilab-store-capture", version: 1, verified: false, captured_at, platform,
+    format: "xilab-store-capture", version: 1, verified: false, captured_at, platform, ...(reset ? { reset: true as const } : {}),
     // seen_at goes up too (helper 0.11.0): packs the latest store list no longer had are hidden as not live
     packs, pulls,
     shape: { pack_keys: shape?.pack_keys ?? [], odds_keys: shape?.odds_keys ?? [], category_keys: shape?.category_keys ?? [], seen },

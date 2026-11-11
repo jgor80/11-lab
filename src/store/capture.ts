@@ -36,6 +36,8 @@ export interface PackOffer {
   /** EA's art id for the pack picture, and a picture address when the store sent one (helper 0.11.0+). */
   asset_id?: number | null;
   image_url?: string | null;
+  /** When a Store tile on screen last showed this pack (helper 0.12.1+): only packs the store shows count as live. */
+  shown_at?: string | null;
   state: string | null;
   pack_type: string | null;
   /** Price in coins and in FC Points; null when the pack can't be bought that way. */

@@ -194,6 +194,11 @@ couple of seconds after the page changes (`src/store/tiles.ts`). Tiles are match
 Points and item count; a tile with no captured pack becomes a pack of its own (id 900000000000 + name hash, no odds).
 Read-only: no clicks, no requests.
 
+Since v0.12.1: the store data lists more packs than the Store screen shows. Packs matched to a visible tile carry
+`shown_at`; once any pack has it, Pack Advisor only lists packs shown within 2 hours of the newest tile read. The popup's
+"Clear stored packs" empties the helper's packs, odds and seen log and the next upload sends `reset: true`, which
+deletes that platform's stored packs on Gaffer Bot (pulls are kept).
+
 ## Your account (helper v0.6.0, bodies not captured yet)
 
 The **addresses** are verified (they load at sign-in, see the sign-in sequence above); the **bodies** are hypotheses
