@@ -33,6 +33,9 @@ export interface PackOffer {
   name: string | null;
   name_key: string | null;
   description: string | null;
+  /** EA's art id for the pack picture, and a picture address when the store sent one (helper 0.11.0+). */
+  asset_id?: number | null;
+  image_url?: string | null;
   state: string | null;
   pack_type: string | null;
   /** Price in coins and in FC Points; null when the pack can't be bought that way. */
@@ -224,6 +227,61 @@ export function summarizeOddsOnly(json: unknown, url: string): { pack_id: number
   return odds.length && pack_id ? { pack_id, odds } : null;
 }
 
+/** A store string that is a localisation key ("FUT_STORE_PACK_101_NAME", "store.pack.gold") rather than display text. */
+const isKey = (v: string) => !/\s/.test(v) && /^[A-Za-z0-9_.-]+$/.test(v) && (/[_.]/.test(v) || v === v.toUpperCase());
+const NAME_FIELDS = ["nameLoc", "nameKey", "packNameLoc", "titleLoc", "name", "packName", "title", "displayName", "localizedName"] as const;
+const DESC_FIELDS = ["descriptionLoc", "descKey", "packDescriptionLoc", "description", "packDescription", "desc"] as const;
+
+/**
+ * The pack's name and description: display text when the store sends it, else EA's text for its key from the Web
+ * App's own strings, else EA's usual store keys for that pack (FUT_STORE_PACK_<id>_NAME / _DESC).
+ */
+export function packText(p: Record<string, unknown>, pack_id: number, names: Record<string, string> = {}) {
+  const pick = (fields: readonly string[], fallbacks: string[], max: number) => {
+    let key: string | null = null;
+    for (const f of fields) {
+      const v = str(p[f], max);
+      if (!v) continue;
+      if (!isKey(v)) return { text: v, key };
+      key ??= v;
+      if (names[v]) return { text: names[v]!, key };
+    }
+    for (const k of fallbacks) if (names[k]) return { text: names[k]!, key: key ?? k };
+    return { text: null, key };
+  };
+  const ids = [pack_id, packAssetId(p)].filter((x): x is number => !!x);
+  const n = pick(NAME_FIELDS, ids.flatMap((id) => [`FUT_STORE_PACK_${id}_NAME`, `FUT_STORE_PACK_${id}_TITLE`]), 200);
+  const d = pick(DESC_FIELDS, ids.map((id) => `FUT_STORE_PACK_${id}_DESC`), 400);
+  return { name: n.text, name_key: n.key, description: d.text };
+}
+
+/** EA's art id for the pack picture, when the store sends one. */
+export const packAssetId = (p: Record<string, unknown>) => int(p.assetId) ?? int(p.packAssetId) ?? int(p.imageAssetId) ?? int(p.artId) ?? int(p.packArtId);
+
+/** A picture address on the store item itself (https EA host, image file), when there is one. */
+export function packImage(p: Record<string, unknown>): string | null {
+  for (const f of ["imageUrl", "image", "imageURL", "packImage", "packImageUrl", "artUrl", "assetUrl", "icon"]) {
+    const v = str(p[f], 400);
+    if (!v) continue;
+    try {
+      const u = new URL(v, "https://www.ea.com/");
+      const ea = u.hostname === "ea.com" || u.hostname.endsWith(".ea.com") || u.hostname.endsWith(".akamaized.net");
+      if (u.protocol === "https:" && ea && /\.(?:png|webp|jpe?g|svg|avif)$/i.test(u.pathname)) return `${u.origin}${u.pathname}`;
+    } catch { /* not an address */ }
+  }
+  return null;
+}
+
+/** Fill in names that arrived after the packs (the Web App's strings load separately). */
+export function nameStoredPacks<T extends PackOffer>(packs: T[], names: Record<string, string>): T[] {
+  return packs.map((p) => {
+    if (p.name) return p;
+    const keys = [p.name_key, `FUT_STORE_PACK_${p.pack_id}_NAME`, p.asset_id ? `FUT_STORE_PACK_${p.asset_id}_NAME` : null].filter((k): k is string => !!k);
+    const k = keys.find((x) => names[x]);
+    return k ? { ...p, name: names[k]! } : p;
+  });
+}
+
 export function summarizeStore(json: unknown, names: Record<string, string> = {}, now = Date.now()): PackOffer[] {
   const seen = new Set<number>();
   const out: PackOffer[] = [];
@@ -236,7 +294,7 @@ export function summarizeStore(json: unknown, names: Record<string, string> = {}
     const odds = oddsListOf(p).map(summarizeOdd).filter((o): o is PackOdd => !!o);
     if (type && !/pack/i.test(type) && !info && !odds.length && !int(p.coins)) continue;
     seen.add(pack_id);
-    const name_key = str(p.nameLoc) ?? str(p.name);
+    const { name, name_key, description } = packText(p, pack_id, names);
     const coinsFromCurrencies = Array.isArray(p.currencies)
       ? (p.currencies as unknown[]).map(rec).find((c) => c && /coin/i.test(String(c.name ?? "")))?.finalFunds
       : undefined;
@@ -245,9 +303,8 @@ export function summarizeStore(json: unknown, names: Record<string, string> = {}
       : undefined;
     out.push({
       pack_id,
-      name: (name_key && names[name_key]) ?? str(p.displayName) ?? null,
-      name_key,
-      description: (str(p.descriptionLoc) && names[str(p.descriptionLoc)!]) ?? str(p.description, 400),
+      name, name_key, description,
+      asset_id: packAssetId(p), image_url: packImage(p),
       state: str(p.state, 40),
       pack_type: str(p.packType, 40) ?? type,
       coins: int(p.coins) ?? int(coinsFromCurrencies),

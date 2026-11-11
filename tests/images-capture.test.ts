@@ -30,4 +30,9 @@ describe("card art addresses", () => {
     expect(imagesDue({ last_images: "t2", images_sent: "t1" })).toBe(true);
     expect(imagesDue({})).toBe(false);
   });
+
+  it("keeps pack pictures (Pack Advisor) but still never faces", () => {
+    expect(cardArtUrl("https://www.ea.com/ea-sports-fc/ultimate-team/web-app/content/x/2027/fut/ui/packs/pack_3021.png")).toBe("https://www.ea.com/ea-sports-fc/ultimate-team/web-app/content/x/2027/fut/ui/packs/pack_3021.png");
+    expect(cardArtUrl("https://www.ea.com/x/portraits/pack1.png")).toBeNull();
+  });
 });

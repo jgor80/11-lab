@@ -1,7 +1,8 @@
 // Card art addresses (Jeff, 2026-11-10). EA's Web App loads promo, Icon and Hero card backgrounds from addresses that
 // can't be guessed from outside. The helper notes the ADDRESSES of card-art images the Web App itself loads (never the
 // images, never anything about the account), so Gaffer Bot can learn EA's naming and let browsers load the same files
-// straight from EA. Faces, club badges, flags and league logos are already known and skipped.
+// straight from EA. Faces, club badges, flags and league logos are already known and skipped. Since 0.11.0 pack
+// pictures are kept too, so Pack Advisor can show each pack.
 
 export interface ImageSeen { url: string; first_seen: string; last_seen: string; count: number }
 
@@ -9,6 +10,9 @@ const IMAGE = /\.(?:png|webp|jpe?g|svg|avif)$/i;
 // Already known to Gaffer Bot, or not card art
 const SKIP = /\/(?:portraits|playerheads|clubs|flags|leagueLogos|leagues|nations|crests|badges|avatars?|icons?|ui|fonts?)\//i;
 const ART = /background|itemBG|cardbg|cards_bg|rarit|special|shell|card|item/i;
+// Pack pictures (helper 0.11.0, for Pack Advisor): kept wherever they live, apart from faces and badges
+const PACK = /pack/i;
+const NEVER = /\/(?:portraits|playerheads|clubs|flags|leagueLogos|nations|crests|avatars?)\//i;
 
 /** EA hosts only (the Web App and its asset servers). */
 function eaHost(host: string): boolean {
@@ -25,7 +29,8 @@ export function cardArtUrl(raw: string, base = "https://www.ea.com/"): string | 
   }
   if (u.protocol !== "https:" || !eaHost(u.hostname)) return null;
   const path = u.pathname;
-  if (!IMAGE.test(path) || SKIP.test(path) || !ART.test(path)) return null;
+  if (!IMAGE.test(path) || NEVER.test(path)) return null;
+  if (!PACK.test(path) && (SKIP.test(path) || !ART.test(path))) return null;
   if (path.length > 300) return null;
   return `${u.origin}${path}`;
 }

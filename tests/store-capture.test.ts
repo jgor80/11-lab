@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreLike, isStoreResponse, mergeOdds, mergePacks, mergePulls, mergeSeen, packIdFromBody, parseOdds, parseStoreStrings,
-  storeSeen, storePath, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore,
+  nameStoredPacks, packText, storeSeen, storePath, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore,
 } from "../src/store/capture.js";
 import { buildStoreExport, packPlan, PULL_BATCH } from "../src/market/upload.js";
 
@@ -144,5 +144,21 @@ describe("pack store capture", () => {
     const merged = mergePacks([{ ...a!, seen_at: "2026-11-09T17:00:00.000Z" }], [{ ...a!, coins: null, odds: [] }], "2026-11-09T18:00:00.000Z");
     expect(merged[0]!.coins).toBe(7500);
     expect(merged[0]!.odds.length).toBe(a!.odds.length);
+  });
+
+  it("names packs from display text, the Web App's strings or EA's usual store keys", () => {
+    expect(packText({ name: "Rare Gold Pack" }, 1).name).toBe("Rare Gold Pack");
+    expect(packText({ nameLoc: "FUT_X_NAME" }, 1, { FUT_X_NAME: "Gold Pack" })).toMatchObject({ name: "Gold Pack", name_key: "FUT_X_NAME" });
+    expect(packText({}, 101, { FUT_STORE_PACK_101_NAME: "Premium Gold", FUT_STORE_PACK_101_DESC: "12 gold items" })).toEqual({ name: "Premium Gold", name_key: "FUT_STORE_PACK_101_NAME", description: "12 gold items" });
+    expect(packText({ assetId: 7 }, 101, { FUT_STORE_PACK_7_NAME: "By art id" }).name).toBe("By art id");
+    expect(packText({ nameLoc: "FUT_UNKNOWN" }, 1)).toMatchObject({ name: null, name_key: "FUT_UNKNOWN" });
+    const [later] = nameStoredPacks([{ ...summarizeStore({ purchase: [{ id: 55, coins: 100 }] }, {}, NOW)[0]!, seen_at: "s" }], { FUT_STORE_PACK_55_NAME: "Late name" });
+    expect(later!.name).toBe("Late name");
+  });
+
+  it("keeps a picture address and art id from the store item", () => {
+    const [p] = summarizeStore({ purchase: [{ id: 9, coins: 100, assetId: 3021, imageUrl: "https://www.ea.com/x/packs/pack_3021.png?v=2" }] }, {}, NOW);
+    expect(p).toMatchObject({ asset_id: 3021, image_url: "https://www.ea.com/x/packs/pack_3021.png" });
+    expect(summarizeStore({ purchase: [{ id: 9, coins: 100, imageUrl: "https://evil.example/p.png" }] }, {}, NOW)[0]!.image_url).toBeNull();
   });
 });

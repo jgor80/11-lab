@@ -1,7 +1,7 @@
 // Extension side (isolated world): receives summaries from hook.ts and keeps them in the extension's own
 // storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
-import { mergeOdds, mergePacks, mergePulls, mergeSeen } from "../../src/store/capture.js";
+import { mergeOdds, mergePacks, mergePulls, mergeSeen, nameStoredPacks } from "../../src/store/capture.js";
 import { accountStamp, mergeAccount } from "../../src/account/capture.js";
 import { mergeImages } from "../../src/images/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
@@ -46,11 +46,13 @@ window.addEventListener("message", (e: MessageEvent) => {
     if (d.storeNames && typeof d.storeNames === "object") {
       const store_names = { ...(s.store_names ?? {}), ...d.storeNames };
       // Names can arrive after the store list: fill them in on the packs already stored.
-      const packs = (s.packs ?? []).map((p) => (!p.name && p.name_key && store_names[p.name_key] ? { ...p, name: store_names[p.name_key]! } : p));
-      chrome.storage.local.set({ store_names, packs });
+      const packs = nameStoredPacks(s.packs ?? [], store_names);
+      const named = packs.filter((p) => p.name).length > (s.packs ?? []).filter((p) => p.name).length;
+      // Newly named packs count as a store change, so the names go up on the next upload.
+      chrome.storage.local.set({ store_names, packs, ...(named ? { last_store: now } : {}) });
     }
     if (d.store && Array.isArray(d.store.packs)) {
-      const named = d.store.packs.map((p: { name: string | null; name_key: string | null }) => (!p.name && p.name_key && s.store_names?.[p.name_key] ? { ...p, name: s.store_names[p.name_key] } : p));
+      const named = nameStoredPacks(d.store.packs, s.store_names ?? {});
       const merged = mergeOdds(mergePacks(s.packs ?? [], named, now), s.store_odds, Array.isArray(d.store.odds) ? d.store.odds : []);
       const read = named.length > 0 || (Array.isArray(d.store.odds) && d.store.odds.length > 0);
       // The address and field names are kept even when nothing was read, and uploaded, so a miss can be seen on Gaffer Bot.
