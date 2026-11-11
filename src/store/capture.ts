@@ -171,6 +171,12 @@ export function summarizeOdd(raw: unknown): PackOdd | null {
 }
 
 const iso = (v: unknown, now: number, kind: "epoch" | "seconds_from_now"): string | null => {
+  // A date string ("2026-11-14T18:00:00Z") counts as an absolute time whatever the field is called
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+    const ms = Date.parse(v);
+    return Number.isFinite(ms) && ms > Date.UTC(2020, 0, 1) && ms < Date.UTC(2040, 0, 1) ? new Date(ms).toISOString() : null;
+  }
+  if (typeof v === "string" && /^\d{1,13}$/.test(v)) v = Number(v);
   if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
   if (kind === "seconds_from_now") return v < 400 * 86_400 ? new Date(now + v * 1000).toISOString() : null;
   const ms = v > 1e12 ? v : v * 1000;
@@ -282,6 +288,19 @@ export function nameStoredPacks<T extends PackOffer>(packs: T[], names: Record<s
   });
 }
 
+/**
+ * When a pack starts or leaves the store: a countdown in seconds, else an absolute time (epoch or date string).
+ * Also looked for under the item's `timing`, `availability` or `duration` object. FC 27 field names unconfirmed.
+ */
+export function packTime(p: Record<string, unknown>, now: number, countdown: string[], absolute: string[]): string | null {
+  for (const o of [p, rec(p.timing), rec(p.availability), rec(p.duration), rec(p.validity)]) {
+    if (!o) continue;
+    for (const k of countdown) { const t = iso(o[k], now, "seconds_from_now"); if (t) return t; }
+    for (const k of absolute) { const t = iso(o[k], now, "epoch"); if (t) return t; }
+  }
+  return null;
+}
+
 export function summarizeStore(json: unknown, names: Record<string, string> = {}, now = Date.now()): PackOffer[] {
   const seen = new Set<number>();
   const out: PackOffer[] = [];
@@ -314,8 +333,8 @@ export function summarizeStore(json: unknown, names: Record<string, string> = {}
       item_count: int(info?.itemQuantity) ?? int(p.quantity),
       gold: nonNeg(info?.goldQuantity), silver: nonNeg(info?.silverQuantity), bronze: nonNeg(info?.bronzeQuantity), rare: nonNeg(info?.rareQuantity),
       content_type: str(info?.contentType, 40),
-      start_at: iso(p.secondsUntilStart, now, "seconds_from_now") ?? iso(p.start, now, "epoch"),
-      end_at: iso(p.secondsUntilEnd, now, "seconds_from_now") ?? iso(p.end, now, "epoch"),
+      start_at: packTime(p, now, ["secondsUntilStart", "secondsToStart"], ["start", "startTime", "startDate", "startsAt", "availableFrom"]),
+      end_at: packTime(p, now, ["secondsUntilEnd", "secondsUntilExpiry", "secondsToEnd", "timeRemaining", "expiresIn"], ["end", "endTime", "endDate", "expiry", "expiryTime", "expiresAt", "expiration", "expirationTime", "availableUntil"]),
       purchase_limit: int(p.purchaseLimit), purchase_count: nonNeg(p.purchaseCount),
       unopened: p.unopened === true,
       odds,
