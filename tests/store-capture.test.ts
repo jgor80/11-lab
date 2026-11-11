@@ -100,7 +100,7 @@ describe("pack store capture", () => {
     expect(packPlan({ pulls: Array.from({ length: PULL_BATCH + 5 }, (_, i) => pull(i)) }).pulls).toHaveLength(PULL_BATCH);
     const file = buildStoreExport([{ ...summarizeStore(store, {}, NOW)[0]!, seen_at: "x" }], [], null, "console", "t");
     expect(file).toMatchObject({ format: "xilab-store-capture", platform: "console", captured_at: "t" });
-    expect("seen_at" in file.packs[0]!).toBe(false);
+    expect((file.packs[0] as { seen_at?: string }).seen_at).toBe("x");
   });
 
   it("reads other store, pack and odds addresses and logs them without values", () => {
