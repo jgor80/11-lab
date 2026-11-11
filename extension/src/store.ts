@@ -43,6 +43,8 @@ export interface Stored {
   last_images?: string;
   images_sent?: string;
   last_store_seen?: string;
+  /** When the Store screen's tiles (names, end times) were last read. */
+  last_tiles?: string;
   store_seen_sent?: string;
   /** Items from packs the user opened, and the opened_at of the newest one uploaded. */
   pulls?: PackPull[];

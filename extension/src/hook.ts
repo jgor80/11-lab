@@ -11,6 +11,7 @@ import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, sto
 import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
 import { accountKind, readAccountResponse } from "../../src/account/capture.js";
 import { cardArtUrl } from "../../src/images/capture.js";
+import { parseStoreTile, type StoreTile } from "../../src/store/tiles.js";
 import { isOwnedPackOpen, isPackOpen, isPurchasedItems, isStoreLike, packIdFromBody, parseStoreStrings, storeSeen, storeShape, summarizeOddsOnly, summarizePulls, summarizeStore } from "../../src/store/capture.js";
 
 const TAG = "xilab-capture";
@@ -107,6 +108,50 @@ try {
   }).observe({ type: "resource", buffered: true });
 } catch {
   /* resource timing unavailable */
+}
+
+// Store tiles: the pack names, descriptions, end times, limits, prices and pictures the Store screen shows (FC 27's
+// store data has no readable names). Reads the page's visible text only, a couple of seconds after it changes.
+const TILE_HINT = /^(?:Ending|Ends|User limit)\b/i;
+let tileTimer: ReturnType<typeof setTimeout> | null = null;
+let lastTiles = "";
+function scanTiles() {
+  tileTimer = null;
+  try {
+    const tiles: StoreTile[] = [];
+    const done = new Set<Element>();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n && tiles.length < 120; n = walker.nextNode()) {
+      if (!TILE_HINT.test((n.textContent ?? "").trim())) continue;
+      // Climb to the smallest box that holds a pack name and a price
+      let el: Element | null = n.parentElement;
+      for (let depth = 0; el && depth < 8; depth++, el = el.parentElement) {
+        if (done.has(el)) break;
+        // One line per text node, so layout (inline or block) doesn't merge "20" with "Items" or two prices
+        const parts: string[] = [];
+        const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let t = tw.nextNode(); t && parts.length < 80; t = tw.nextNode()) { const v = (t.textContent ?? "").trim(); if (v) parts.push(v); }
+        const text = parts.join("\n");
+        if (text.length > 1500) break;
+        const img = [...el.querySelectorAll("img")].map((i) => cardArtUrl(i.currentSrc || i.src, window.location.href)).find(Boolean) ?? null;
+        const tile = parseStoreTile(text, img);
+        if (tile) { done.add(el); tiles.push(tile); break; }
+      }
+    }
+    const key = JSON.stringify(tiles);
+    if (tiles.length && key !== lastTiles) {
+      lastTiles = key;
+      window.postMessage({ [TAG]: true, storeTiles: tiles }, window.location.origin);
+    }
+  } catch {
+    /* never get in the Web App's way */
+  }
+}
+try {
+  new MutationObserver(() => { if (!tileTimer) tileTimer = setTimeout(scanTiles, 2000); })
+    .observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+} catch {
+  /* no DOM access */
 }
 
 // The last search the user ran themselves: its address (as a template) and its headers (the session).

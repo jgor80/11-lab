@@ -2,6 +2,7 @@
 // storage. Nothing is sent anywhere unless you connect Gaffer Bot; then background.ts uploads them to your account.
 import { mergeClubItems } from "../../src/club/capture.js";
 import { mergeOdds, mergePacks, mergePulls, mergeSeen, nameStoredPacks } from "../../src/store/capture.js";
+import { applyTiles } from "../../src/store/tiles.js";
 import { accountStamp, mergeAccount } from "../../src/account/capture.js";
 import { mergeImages } from "../../src/images/capture.js";
 import { buildQueue, cooldownUntil, COOLDOWN_HOURS, inCooldown, pruneLog, runLimit } from "../../src/market/pricecheck.js";
@@ -51,6 +52,10 @@ window.addEventListener("message", (e: MessageEvent) => {
       // Newly named packs count as a store change, so the names go up on the next upload.
       chrome.storage.local.set({ store_names, packs, ...(named ? { last_store: now } : {}) });
     }
+    if (Array.isArray(d.storeTiles) && d.storeTiles.length) {
+      // What the Store screen shows: real names, end times, limits, pictures. Counts as a store change for upload.
+      chrome.storage.local.set({ packs: applyTiles(s.packs ?? [], d.storeTiles.slice(0, 120), Date.now()), last_store: now, last_tiles: now });
+    }
     if (d.store && Array.isArray(d.store.packs)) {
       const named = nameStoredPacks(d.store.packs, s.store_names ?? {});
       const merged = mergeOdds(mergePacks(s.packs ?? [], named, now), s.store_odds, Array.isArray(d.store.odds) ? d.store.odds : []);
@@ -75,7 +80,7 @@ window.addEventListener("message", (e: MessageEvent) => {
       chrome.storage.local.set({ images: mergeImages(s.images, urls, now), ...(fresh ? { last_images: now } : {}) });
       if (!fresh) return;
     }
-    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.pulls) || d.account || Array.isArray(d.images)) {
+    if (Array.isArray(d.rows) || Array.isArray(d.club) || d.store || Array.isArray(d.storeTiles) || Array.isArray(d.pulls) || d.account || Array.isArray(d.images)) {
       try { chrome.runtime.sendMessage({ upload: "soon" }, () => void chrome.runtime.lastError); } catch { /* extension reloaded */ }
     }
   });
