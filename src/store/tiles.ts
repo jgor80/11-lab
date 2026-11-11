@@ -92,7 +92,7 @@ export function applyTiles<T extends PackOffer & { seen_at: string }>(packs: T[]
         purchase_limit: p.purchase_limit ?? t.user_limit, image_url: p.image_url ?? t.image_url,
         item_count: p.item_count ?? t.items, untradeable: p.untradeable || t.untradeable,
         // On screen now, so live now; a tile-only pack takes the tile's (fresher) countdown
-        seen_at, ...(p.pack_id >= 900_000_000_000 ? { end_at: end_at ?? p.end_at } : {}),
+        seen_at, shown_at: seen_at, ...(p.pack_id >= 900_000_000_000 ? { end_at: end_at ?? p.end_at } : {}),
       };
     } else {
       out.push({
@@ -100,7 +100,7 @@ export function applyTiles<T extends PackOffer & { seen_at: string }>(packs: T[]
         coins: t.coins, points: t.points, untradeable: t.untradeable, is_player_pick: /pick/i.test(t.description ?? ""),
         item_count: t.items, gold: null, silver: null, bronze: null, rare: null, content_type: null,
         start_at: null, end_at, purchase_limit: t.user_limit, purchase_count: null, unopened: false, odds: [],
-        asset_id: null, image_url: t.image_url, seen_at,
+        asset_id: null, image_url: t.image_url, seen_at, shown_at: seen_at,
       });
     }
   }

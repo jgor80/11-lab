@@ -45,6 +45,9 @@ export interface Stored {
   last_store_seen?: string;
   /** When the Store screen's tiles (names, end times) were last read. */
   last_tiles?: string;
+  /** "Clear stored packs" in the popup, and the reset last sent to Gaffer Bot. */
+  pack_reset?: string;
+  pack_reset_sent?: string;
   store_seen_sent?: string;
   /** Items from packs the user opened, and the opened_at of the newest one uploaded. */
   pulls?: PackPull[];

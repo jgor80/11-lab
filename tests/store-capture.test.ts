@@ -93,9 +93,12 @@ describe("pack store capture", () => {
 
   it("plans pack uploads: the store when it changed, pulls not sent yet", () => {
     const pull = (m: number) => ({ item_id: m, ea_item_id: 9, item_type: null, rating: 80, rare_flag: 1, untradeable: false, pack_id: null, opened_at: new Date(NOW + m * 60_000).toISOString() });
-    expect(packPlan({})).toEqual({ store: false, seen: false, pulls: [] });
-    expect(packPlan({ last_store: "a", store_sent: "a", pulls: [pull(1), pull(2)], pulls_sent_until: pull(1).opened_at })).toEqual({ store: false, seen: false, pulls: [pull(2)] });
+    expect(packPlan({})).toEqual({ store: false, seen: false, reset: false, pulls: [] });
+    expect(packPlan({ last_store: "a", store_sent: "a", pulls: [pull(1), pull(2)], pulls_sent_until: pull(1).opened_at })).toEqual({ store: false, seen: false, reset: false, pulls: [pull(2)] });
     expect(packPlan({ last_store_seen: "b", store_seen_sent: "a" }).seen).toBe(true);
+    expect(packPlan({ pack_reset: "r", last_store: "a", store_sent: "a" })).toMatchObject({ store: true, reset: true });
+    expect(packPlan({ pack_reset: "r", pack_reset_sent: "r" }).reset).toBe(false);
+    expect(buildStoreExport([], [], null, "pc", "t", [], true).reset).toBe(true);
     expect(packPlan({ last_store: "b", store_sent: "a" }).store).toBe(true);
     expect(packPlan({ pulls: Array.from({ length: PULL_BATCH + 5 }, (_, i) => pull(i)) }).pulls).toHaveLength(PULL_BATCH);
     const file = buildStoreExport([{ ...summarizeStore(store, {}, NOW)[0]!, seen_at: "x" }], [], null, "console", "t");

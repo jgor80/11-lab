@@ -26,6 +26,8 @@ function refresh() {
     $<HTMLButtonElement>("pc-start").disabled = !!s.pc_running;
     $("count").textContent = String(s.rows?.length ?? 0);
     $("pack-count").textContent = String(s.packs?.length ?? 0);
+    const shown = (s.packs ?? []).filter((p) => p.shown_at).length;
+    $("pack-shown").textContent = shown ? `${shown} of them seen on the Store screen` : "";
     $("pull-count").textContent = String(s.pulls?.length ?? 0);
     const seen = s.store_seen ?? [];
     $("pack-last").textContent = s.last_store ? `Last store capture ${new Date(s.last_store).toLocaleString()}`
@@ -93,6 +95,16 @@ $("art-copy").addEventListener("click", () =>
   chrome.storage.local.get(["images"], (s: Stored) => navigator.clipboard.writeText((s.images ?? []).map((x) => x.url).join("\n")).then(() => ($("art-note").textContent = "Copied."))));
 $("acc-clear").addEventListener("click", () => {
   if (confirm("Delete the stored account capture? The helper copies it again next time the Web App loads it.")) chrome.storage.local.set({ account: {}, last_account: "" }, refresh);
+});
+// Start the pack list afresh: the helper forgets its packs, and Gaffer Bot drops this platform's stored packs on the
+// next upload. Open Store > Packs again to rebuild it from what the store shows now.
+$("packs-clear").addEventListener("click", () => {
+  if (!confirm("Clear the stored store packs here and on Gaffer Bot? Open Store > Packs again afterwards to rebuild the list. Your pack openings are kept.")) return;
+  const now = new Date().toISOString();
+  chrome.storage.local.set({ packs: [], store_odds: {}, store_seen: [], pack_reset: now, last_store: now }, () => {
+    refresh();
+    try { chrome.runtime.sendMessage({ upload: "now" }, () => void chrome.runtime.lastError); } catch { /* reloaded */ }
+  });
 });
 $("club-clear").addEventListener("click", () => {
   if (confirm("Delete the stored club capture? Export first if you need it.")) chrome.storage.local.set({ club: [] }, refresh);

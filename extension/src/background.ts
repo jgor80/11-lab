@@ -47,11 +47,12 @@ async function upload() {
     // addresses seen whenever there are new ones, even with no packs read, so a miss shows on Gaffer Bot.
     const packs = packPlan(s);
     if (packs.store || packs.seen || packs.pulls.length) {
-      const r = await post(s.helper_key, "/helper/packs", buildStoreExport(packs.store ? s.packs ?? [] : [], packs.pulls, s.store_shape, s.platform === "pc" ? "pc" : "console", new Date().toISOString(), s.store_seen ?? []));
+      const r = await post(s.helper_key, "/helper/packs", buildStoreExport(packs.store ? s.packs ?? [] : [], packs.pulls, s.store_shape, s.platform === "pc" ? "pc" : "console", new Date().toISOString(), s.store_seen ?? [], packs.reset));
       if (!r.ok) { if (await failed({ ...r, note: `Pack store: ${r.note}` })) return; }
       else await set({
         ...(packs.store ? { store_sent: s.last_store } : {}),
         ...(packs.seen ? { store_seen_sent: s.last_store_seen } : {}),
+        ...(packs.reset ? { pack_reset_sent: s.pack_reset } : {}),
         ...(packs.pulls.length ? { pulls_sent_until: packs.pulls.at(-1)!.opened_at } : {}),
         last_upload: new Date().toISOString(),
         upload_note: done(packs.store ? `${(s.packs ?? []).length} store packs uploaded.` : packs.pulls.length ? "Pack pulls uploaded." : "Store seen, no packs read yet."),
