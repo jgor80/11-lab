@@ -181,6 +181,12 @@ way, packs are also found nested a few levels down (`id` or `packId` plus a pric
 every such answer is logged by address (ids as `N`) with its top-level field names and how many packs and odds lines
 were read. That log (`shape.seen`) is uploaded even when no pack was read, and Pack Advisor shows it.
 
+Since v0.11.0 (packs showed as id numbers only): names come from display text on the item, else the Web App's own
+strings for its key, else EA's usual store keys `FUT_STORE_PACK_<id>_NAME` / `_DESC` (also tried with the art id).
+Names that load after the store are filled in and re-uploaded. Each pack also keeps `asset_id` (assetId / packAssetId /
+imageAssetId / artId) and `image_url` when the item carries an EA picture address, and the image-address log keeps
+any EA picture with "pack" in its path, so Pack Advisor can match a picture to each pack. All hypotheses on FC 27.
+
 ## Your account (helper v0.6.0, bodies not captured yet)
 
 The **addresses** are verified (they load at sign-in, see the sign-in sequence above); the **bodies** are hypotheses

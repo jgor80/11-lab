@@ -57,11 +57,12 @@ export function packPlan(s: UploadState): { store: boolean; seen: boolean; pulls
   return { store: !!s.last_store && s.last_store !== s.store_sent, seen: !!s.last_store_seen && s.last_store_seen !== s.store_seen_sent, pulls };
 }
 
-/** The pack file sent to Gaffer Bot (POST /helper/packs). Packs are sent only when the store changed. */
+/** The pack file sent to Gaffer Bot (POST /helper/packs). Packs are sent only when the store changed, each with when it was last seen. */
 export function buildStoreExport(packs: (PackOffer & { seen_at?: string })[], pulls: PackPull[], shape: StoreCapture["shape"] | null | undefined, platform: "console" | "pc", captured_at = new Date().toISOString(), seen: StoreSeen[] = []): StoreCapture & { platform: "console" | "pc" } {
   return {
     format: "xilab-store-capture", version: 1, verified: false, captured_at, platform,
-    packs: packs.map(({ seen_at: _s, ...p }) => p), pulls,
+    // seen_at goes up too (helper 0.11.0): packs the latest store list no longer had are hidden as not live
+    packs, pulls,
     shape: { pack_keys: shape?.pack_keys ?? [], odds_keys: shape?.odds_keys ?? [], category_keys: shape?.category_keys ?? [], seen },
   };
 }
