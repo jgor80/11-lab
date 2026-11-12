@@ -28,6 +28,9 @@ import {
   roundToStep,
   rsVerdict,
   toSeries,
+  toSeriesByCard,
+  isPeer,
+  peerChanges,
   transferTax,
   type MarketCard,
   type PriceObservation,
@@ -363,6 +366,72 @@ describe("market service", () => {
       expect(i.could_be_wrong.length).toBeGreaterThan(0);
     }
     expect(r.items.find((i) => i.card_id === "stale")!.status).toBe("insufficient_evidence");
+  });
+});
+
+describe("market service at scale: grouped peers give the same numbers as comparing every pair", () => {
+  // A mixed market: several categories, ratings, positions and stat lines, with stale, missing and PC-only cards
+  const POS = ["ST", "CM", "CB", "RW", "LB", "GK", "CAM", "CDM"];
+  const CAT = ["base", "promo", "icon", "hero"] as const;
+  const cards = Array.from({ length: 90 }, (_, i) =>
+    card(`c${i}`, {
+      positions: [POS[i % POS.length]!],
+      rating: 82 + (i % 7),
+      category: CAT[i % 4]!,
+      stats: i % 11 === 0 ? {} : { pac: 60 + ((i * 7) % 35), sho: 55 + ((i * 5) % 40), pas: 60 + ((i * 3) % 35), dri: 62 + ((i * 11) % 33), def: 40 + ((i * 13) % 50), phy: 55 + ((i * 17) % 40) },
+    }),
+  );
+  const rows = cards.flatMap((c, i) =>
+    i % 13 === 0
+      ? []
+      : hourly(c.id, 168, (h) => 5_000 + i * 40 + Math.round(900 * Math.sin((h + i * 3) / (5 + (i % 6)))) + (i % 5) * (168 - h), {
+          until: i % 9 === 0 ? 20 : 0,
+          platform: i % 17 === 0 ? "pc" : "console",
+          delayMin: i % 4 === 0 ? 400 : 5,
+        }),
+  );
+  const svc = service(cards, rows);
+
+  it("one pass over the rows builds the same series as reading them per card", () => {
+    const all = toSeriesByCard(rows, "console", A);
+    const ids = [...new Set(rows.map((r) => r.card_id))];
+    expect([...all.keys()]).toEqual(ids);
+    for (const id of ids) expect(all.get(id)).toEqual(toSeries(rows, id, "console", A));
+  });
+
+  it("relative strength and peer prices match the pair-by-pair rules for every card", async () => {
+    const series = toSeriesByCard(rows, "console", A);
+    const isFresh = (id: string) => {
+      const s = series.get(id);
+      return !!s && freshness(s, A, MR).status === "fresh";
+    };
+    let withPeers = 0;
+    for (const c of cards) {
+      if (!series.has(c.id)) continue;
+      const got = await svc.getCardMarketIntelligence("u1", c.id);
+      for (const b of ["category", "rating", "position", "utility"] as const) {
+        const want = peerChanges(cards.filter((o) => isPeer(b, c, o) && isFresh(o.id)).map((o) => series.get(o.id)!));
+        const changes = Object.fromEntries(Object.entries(want).map(([w, v]) => [w, v.value])) as Parameters<typeof relativeStrength>[1][number]["changes"];
+        const [expected] = relativeStrength(series.get(c.id)!, [{ benchmark: b, changes, peers: want["24h"].n }], MR);
+        expect(got.relative_strength.find((r) => r.benchmark === b), `${c.id} ${b}`).toEqual(expected);
+        if (b === "utility" && want["24h"].n >= 3) withPeers++;
+      }
+      const prices = cards.filter((o) => o.id !== c.id && o.rating === c.rating && o.positions[0] === c.positions[0] && isFresh(o.id)).map((o) => series.get(o.id)!.at(-1)!.price);
+      expect(got.mean_reversion).toEqual(meanReversion(series.get(c.id)!, prices, MR));
+    }
+    expect(withPeers).toBeGreaterThan(10); // the fixture really exercises the tactical-fit range
+  });
+
+  it("scores a few thousand cards quickly", async () => {
+    const many = Array.from({ length: 2400 }, (_, i) => card(`m${i}`, { positions: [POS[i % POS.length]!], rating: 80 + (i % 12), category: CAT[i % 4]! }));
+    const manyRows = many.flatMap((c, i) => hourly(c.id, 192, (h) => 3_000 + ((i * 131 + h * 17 * (1 + (i % 7))) % 5_000)).filter((_, k) => k % 4 === 0));
+    const big = service(many, manyRows);
+    const t = Date.now();
+    const o = await big.getMarketOverview("u1");
+    const r = await big.findMarketOpportunities("u1", { limit: 10 });
+    expect(o.coverage.fresh).toBe(2400);
+    expect(r.total).toBe(2400);
+    expect(Date.now() - t).toBeLessThan(10_000); // was minutes: every card against every other card
   });
 });
 

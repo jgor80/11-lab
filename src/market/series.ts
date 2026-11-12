@@ -31,6 +31,28 @@ export function toSeries(rows: PriceObservation[], card_id: string, platform: Pl
   return [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ t, price: v.p }));
 }
 
+/**
+ * Every card's series on one platform, built in one pass over the rows. Gives exactly what toSeries gives for each
+ * card id in the rows (a card with no usable rows gets an empty series), without re-reading all rows per card.
+ */
+export function toSeriesByCard(rows: PriceObservation[], platform: Platform, asOf: string): Map<string, Point[]> {
+  const a = ms(asOf);
+  const byCard = new Map<string, Map<number, { p: number; r: number }>>();
+  for (const r of rows) {
+    let byT = byCard.get(r.card_id);
+    if (!byT) byCard.set(r.card_id, (byT = new Map()));
+    if (r.platform !== platform) continue;
+    const t = ms(r.observed_at);
+    const rec = ms(r.received_at);
+    if (!(rec <= a && t <= a)) continue;
+    const prev = byT.get(t);
+    if (!prev || rec >= prev.r) byT.set(t, { p: r.price, r: rec });
+  }
+  const out = new Map<string, Point[]>();
+  for (const [id, byT] of byCard) out.set(id, [...byT.entries()].sort((x, y) => x[0] - y[0]).map(([t, v]) => ({ t, price: v.p })));
+  return out;
+}
+
 export function freshness(series: Point[], asOf: string, rules: MarketRules = DEFAULT_MARKET_RULES): FreshnessCheck {
   const last = series.at(-1);
   if (!last) return { status: "missing", latest_observed_at: null, age_hours: null, stale_after_hours: rules.stale_after_hours, message: "No price observations." };

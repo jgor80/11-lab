@@ -38,6 +38,26 @@ export function isPeer(b: Exclude<Benchmark, "market">, card: MarketCard, other:
   }
 }
 
+/**
+ * The value isPeer compares for a benchmark, so cards can be grouped once instead of compared pair by pair.
+ * category and position: peers have the same key. rating: the rating (peers are within 1). utility:
+ * "line|best fit" (peers share the line and are within 3 fit points). null = the card has no peers for it.
+ */
+export function peerGroupKey(b: Exclude<Benchmark, "market">, card: MarketCard): string | null {
+  switch (b) {
+    case "category":
+      return String(card.category);
+    case "rating":
+      return String(card.rating);
+    case "position":
+      return String(card.positions[0]);
+    case "utility": {
+      const fit = bestFit(card);
+      return fit === null ? null : `${LINE[card.positions[0] ?? ""]}|${fit}`;
+    }
+  }
+}
+
 export type RsVerdict = "outperforming" | "underperforming" | "in_line" | "insufficient_data";
 
 export interface RsCell {
