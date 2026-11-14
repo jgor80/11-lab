@@ -27,7 +27,7 @@ async function upload() {
   if (running) return;
   running = true;
   try {
-    const s = await get(["helper_key", "rows", "sent_until", "club", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent", "store_seen", "last_store_seen", "store_seen_sent", "images", "last_images", "images_sent"]);
+    const s = await get(["helper_key", "rows", "sent_until", "club", "squads", "names", "last_club", "club_sent", "packs", "store_shape", "last_store", "store_sent", "pulls", "pulls_sent_until", "platform", "account", "last_account", "account_sent", "store_seen", "last_store_seen", "store_seen_sent", "images", "last_images", "images_sent"]);
     if (!s.helper_key) return;
     const plan = uploadPlan(s);
     // Each part uploads on its own: one refused part no longer holds back the others. A dead key stops everything.
@@ -39,7 +39,7 @@ async function upload() {
     };
     const done = (msg: string) => [...notes, msg].join(" ");
     if (plan.club && s.club?.length) {
-      const r = await post(s.helper_key, "/helper/club", buildClubExport(s.club, s.names ?? emptyNames()));
+      const r = await post(s.helper_key, "/helper/club", buildClubExport(s.club, s.names ?? emptyNames(), undefined, s.squads ?? []));
       if (!r.ok) { if (await failed(r)) return; }
       else await set({ club_sent: s.last_club, last_upload: new Date().toISOString(), upload_note: done("Club uploaded.") });
     }

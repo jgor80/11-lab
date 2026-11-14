@@ -1,5 +1,5 @@
 import { MAX_LAST_SALES, type CaptureRow } from "../../src/market/capture.js";
-import type { ClubItem, ClubNames } from "../../src/club/capture.js";
+import type { ClubItem, ClubNames, ClubSquad } from "../../src/club/capture.js";
 import type { AccountState } from "../../src/account/capture.js";
 import type { ImageSeen } from "../../src/images/capture.js";
 import type { PackOdd, PackOffer, PackPull, StoreCapture, StoreSeen } from "../../src/store/capture.js";
@@ -8,6 +8,8 @@ export interface Stored {
   rows?: CaptureRow[];
   /** Your club and squad items, newest copy of each. */
   club?: ClubItem[];
+  /** Squads opened in the Web App (formation and who is where), newest first. */
+  squads?: ClubSquad[];
   last_club?: string;
   names?: ClubNames;
   platform?: "console" | "pc";
