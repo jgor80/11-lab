@@ -2,7 +2,7 @@
 // Fixture shapes follow past seasons' Web App responses; made-up ids and names, no EA data.
 import { describe, expect, it } from "vitest";
 import {
-  buildClubExport, isClubResponse, isLocalisation, isPlayerNames, mergeClubItems, parseLocalisedNames, parsePlayerNames, summarizeClub,
+  buildClubExport, isClubResponse, isLocalisation, isPlayerNames, mergeClubItems, mergeSquads, parseLocalisedNames, parsePlayerNames, summarizeClub, summarizeSquad,
 } from "../src/club/capture.js";
 import { isTransferMarketSearch } from "../src/market/capture.js";
 
@@ -32,6 +32,26 @@ describe("club capture", () => {
     expect(items[1]).toMatchObject({ untradeable: false, loan: true });
     expect(items[2]).toMatchObject({ kind: "manager", rating: null, stats: null });
     expect(items[3]).toMatchObject({ position: null, stats: null });
+  });
+
+  it("reads which player is where in a squad, and its formation", () => {
+    const body = { id: 0, squadName: " Main ", formation: "f4231A", secret: "x", players: [
+      { index: 1, itemData: player(11) }, { index: 0, itemData: player(10) }, { index: 2, itemData: { id: 0 } }, { index: 1, itemData: player(12) },
+      { index: 23, itemData: player(13) }, { index: "3", itemData: player(14) }, null, { index: 11, itemData: player(15) }] };
+    const s = summarizeSquad(body, "https://utas.mob.v1.fut.ea.com/ut/game/fc27/squad/active", "2026-11-14T00:00:00.000Z")!;
+    expect(s).toMatchObject({ key: "active", active: true, ea_id: 0, name: "Main", formation: "f4231a", seen_at: "2026-11-14T00:00:00.000Z" });
+    expect(s.players).toEqual([{ index: 0, item_id: 10, ea_item_id: 1010 }, { index: 1, item_id: 11, ea_item_id: 1011 }, { index: 11, item_id: 15, ea_item_id: 1015 }]);
+    expect(s.fields).toEqual(["formation", "id", "players", "secret", "squadName"]);
+    const three = summarizeSquad({ formation: "4-3-3 (2)", players: [{ index: 0, itemData: player(1) }] }, "/ut/game/fc27/squad/3")!;
+    expect(three).toMatchObject({ key: "3", active: false, name: null, formation: null });
+    expect(summarizeSquad({ players: [] }, "/ut/game/fc27/squad/active")).toBeNull();
+    expect(summarizeSquad({ itemData: [player(1)] }, "/ut/game/fc27/club")).toBeNull();
+    expect(summarizeSquad({ players: [{ index: 0, itemData: player(1) }] }, "/ut/game/fc27/club")).toBeNull();
+    // Newest copy of each squad wins, newest first, and they ride along in the club file
+    const newer = { ...three, seen_at: "2026-11-15T00:00:00.000Z" };
+    expect(mergeSquads(mergeSquads([s], three), newer).map((x) => [x.key, x.seen_at.slice(0, 10)])).toEqual([["3", "2026-11-15"], ["active", "2026-11-14"]]);
+    expect(buildClubExport([], { players: {}, teams: {}, leagues: {}, nations: {} }, "t", [s]).squads).toHaveLength(1);
+    expect("squads" in buildClubExport([], { players: {}, teams: {}, leagues: {}, nations: {} })).toBe(false);
   });
 
   it("reads squad responses (players and manager wrapped in itemData)", () => {

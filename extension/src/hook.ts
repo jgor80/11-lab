@@ -8,7 +8,7 @@
 // stay in this page's memory and are never stored or sent anywhere else.
 import { isTransferMarketSearch, summarizeSearch } from "../../src/market/capture.js";
 import { delayBefore, isSafeSearch, isThrottle, learnTemplate, searchUrlFor, stopReason } from "../../src/market/pricecheck.js";
-import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub } from "../../src/club/capture.js";
+import { isClubResponse, isLocalisation, isPlayerNames, parseLocalisedNames, parsePlayerNames, summarizeClub, summarizeSquad } from "../../src/club/capture.js";
 import { accountKind, readAccountResponse } from "../../src/account/capture.js";
 import { cardArtUrl } from "../../src/images/capture.js";
 import { parseStoreTile, type StoreTile } from "../../src/store/tiles.js";
@@ -66,7 +66,9 @@ function emit(url: string, json: unknown, method = "GET") {
   const where = isClubResponse(url);
   if (where) {
     const club = summarizeClub(json, where);
-    if (club.length) window.postMessage({ [TAG]: true, club }, window.location.origin);
+    // A squad also says who is where (formation and places), so Gaffer Bot can show "my current squad"
+    const squad = where === "squad" ? summarizeSquad(json, url) : null;
+    if (club.length || squad) window.postMessage({ [TAG]: true, ...(club.length ? { club } : {}), ...(squad ? { squad } : {}) }, window.location.origin);
     return;
   }
   if (isPlayerNames(url)) {

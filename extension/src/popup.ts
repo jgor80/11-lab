@@ -49,7 +49,7 @@ function refresh() {
     $("acc-last").textContent = s.last_account ? `Last account capture ${new Date(s.last_account).toLocaleString()}` : "Sign in to the Web App to capture your balance and piles.";
     $("art-count").textContent = String(s.images?.length ?? 0);
     $("club-count").textContent = String(s.club?.length ?? 0);
-    $("club-last").textContent = s.last_club ? `Last club capture ${new Date(s.last_club).toLocaleString()}` : "Open your Club in the Web App to capture it.";
+    $("club-last").textContent = s.last_club ? `Last club capture ${new Date(s.last_club).toLocaleString()}` : "Open your Club in the Web App to capture it. Open your squad there too, so Gaffer Bot can show your current squad.";
     $("last").textContent = s.last_capture ? `Last capture ${new Date(s.last_capture).toLocaleString()}` : "No captures yet.";
     $<HTMLSelectElement>("platform").value = s.platform ?? "console";
     $<HTMLInputElement>("paused").checked = !!s.paused;
@@ -83,8 +83,8 @@ $("download").addEventListener("click", () =>
 );
 $("copy").addEventListener("click", () => csv((text) => navigator.clipboard.writeText(text).then(() => ($("last").textContent = "Copied."))));
 $("club-download").addEventListener("click", () =>
-  chrome.storage.local.get(["club", "names"], (s: Stored) => {
-    const text = JSON.stringify(buildClubExport(s.club ?? [], s.names ?? emptyNames()));
+  chrome.storage.local.get(["club", "names", "squads"], (s: Stored) => {
+    const text = JSON.stringify(buildClubExport(s.club ?? [], s.names ?? emptyNames(), undefined, s.squads ?? []));
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
     a.download = `xilab-club-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.json`;
@@ -107,7 +107,7 @@ $("packs-clear").addEventListener("click", () => {
   });
 });
 $("club-clear").addEventListener("click", () => {
-  if (confirm("Delete the stored club capture? Export first if you need it.")) chrome.storage.local.set({ club: [] }, refresh);
+  if (confirm("Delete the stored club capture? Export first if you need it.")) chrome.storage.local.set({ club: [], squads: [] }, refresh);
 });
 $("clear").addEventListener("click", () => {
   if (confirm("Delete all stored captures? Export first if you need them.")) chrome.storage.local.set({ rows: [] }, refresh);

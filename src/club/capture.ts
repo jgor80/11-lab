@@ -40,6 +40,26 @@ export interface ClubNames {
   nations: Record<string, string>;
 }
 
+/**
+ * A squad the user opened in the Web App: its formation and who is where, so Gaffer Bot's Squad Builder can show
+ * "my current squad". UNVERIFIED for FC 27: past seasons sent { id, squadName, formation: "f4231", players:
+ * [{ index, itemData }] } with index 0-10 the starting eleven, 11-17 the bench and 18-22 the reserves. `fields`
+ * lists the top-level names EA actually sent, so the first real capture can be checked.
+ */
+export interface ClubSquad {
+  /** "active" or the squad's number, from the address. One stored squad per key. */
+  key: string;
+  ea_id: number | null;
+  name: string | null;
+  /** EA's formation code as sent ("f4231", "f433a"); mapped to a formation name on Gaffer Bot. */
+  formation: string | null;
+  /** True when it came from the active-squad address. */
+  active: boolean;
+  seen_at: string;
+  players: { index: number; item_id: number; ea_item_id: number }[];
+  fields: string[];
+}
+
 export interface ClubExport {
   format: "xilab-club-capture";
   version: 1;
@@ -47,6 +67,8 @@ export interface ClubExport {
   captured_at: string;
   items: ClubItem[];
   names: ClubNames;
+  /** Squads opened in the Web App, newest first. Left out when none was seen. */
+  squads?: ClubSquad[];
 }
 
 const path = (url: string) => {
@@ -112,6 +134,40 @@ export function summarizeClub(json: unknown, seen_in: "club" | "squad"): ClubIte
   return out;
 }
 
+export const MAX_SQUADS = 12;
+const text = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+
+/** A squad response: formation and the player in each place. Null when it has no players (not a squad). */
+export function summarizeSquad(json: unknown, url: string, seen_at = new Date().toISOString()): ClubSquad | null {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
+  const j = json as Record<string, unknown>;
+  if (!Array.isArray(j.players)) return null;
+  const key = path(url).match(/\/squad\/(\d+|active)$/i)?.[1]?.toLowerCase();
+  if (!key) return null;
+  const players: ClubSquad["players"] = [];
+  const seen = new Set<number>();
+  for (const p of j.players as unknown[]) {
+    if (!p || typeof p !== "object") continue;
+    const row = p as Record<string, unknown>, it = row.itemData as Record<string, unknown> | undefined;
+    const index = nonNeg(row.index), item_id = int(it?.id), ea_item_id = int(it?.resourceId);
+    // Empty places come with id 0; anything past the reserves, or a place seen twice, is not a shape we know
+    if (index === null || index > 22 || seen.has(index) || !item_id || !ea_item_id) continue;
+    seen.add(index);
+    players.push({ index, item_id, ea_item_id });
+  }
+  if (!players.length) return null;
+  const formation = text(j.formation, 16);
+  return {
+    key, ea_id: nonNeg(j.id), name: text(j.squadName, 60) ?? text(j.name, 60), formation: formation && /^[a-z0-9]+$/i.test(formation) ? formation.toLowerCase() : null,
+    active: key === "active", seen_at, players: players.sort((a, b) => a.index - b.index), fields: Object.keys(j).filter((k) => /^[A-Za-z0-9_]{1,40}$/.test(k)).sort().slice(0, 40),
+  };
+}
+
+/** Newest copy of each squad wins; the newest are kept. */
+export function mergeSquads(have: ClubSquad[], add: ClubSquad): ClubSquad[] {
+  return [add, ...have.filter((s) => s.key !== add.key)].sort((a, b) => b.seen_at.localeCompare(a.seen_at)).slice(0, MAX_SQUADS);
+}
+
 /** players.json: { Players: [{ id, f, l, c }], LegendsPlayers: [...] } in past seasons. Common name wins. */
 export function parsePlayerNames(json: unknown): Record<string, string> {
   const out: Record<string, string> = {};
@@ -159,7 +215,7 @@ export function mergeClubItems(have: ClubItem[], add: ClubItem[]): ClubItem[] {
 }
 
 /** The file you import into XI Lab: your items plus only the names those items need. */
-export function buildClubExport(items: ClubItem[], names: ClubNames, captured_at = new Date().toISOString()): ClubExport {
+export function buildClubExport(items: ClubItem[], names: ClubNames, captured_at = new Date().toISOString(), squads: ClubSquad[] = []): ClubExport {
   const pick = (all: Record<string, string>, ids: (number | null)[]) =>
     Object.fromEntries([...new Set(ids.filter((x): x is number => x !== null).map(String))].filter((id) => all[id]).map((id) => [id, all[id]!]));
   return {
@@ -170,5 +226,6 @@ export function buildClubExport(items: ClubItem[], names: ClubNames, captured_at
       leagues: pick(names.leagues, items.map((i) => i.league_id)),
       nations: pick(names.nations, items.map((i) => i.nation_id)),
     },
+    ...(squads.length ? { squads: squads.slice(0, MAX_SQUADS) } : {}),
   };
 }
